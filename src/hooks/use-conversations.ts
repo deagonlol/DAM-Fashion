@@ -1,0 +1,67 @@
+import { useMemo, useSyncExternalStore } from 'react';
+
+import { useListings } from '@/hooks/use-listings';
+import { useCurrentUser } from '@/hooks/use-session';
+import {
+  getConversationsSnapshot,
+  getMessagesSnapshot,
+  subscribeToConversations,
+  subscribeToMessages,
+} from '@/lib/data/messages';
+import type { Conversation, Listing, Message } from '@/lib/data/types';
+import { getUsersSnapshot, subscribeToUsers } from '@/lib/data/users';
+
+export type ConversationSummary = {
+  conversation: Conversation;
+  otherUserName: string;
+  otherUserAvatarUrl: string | undefined;
+  listing: Listing | undefined;
+  lastMessage: Message | undefined;
+};
+
+function useAllMessages() {
+  return useSyncExternalStore(subscribeToMessages, getMessagesSnapshot);
+}
+
+/** The current user's conversations, most recently active first. */
+export function useConversationSummaries(): ConversationSummary[] {
+  const currentUser = useCurrentUser();
+  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot);
+  const messages = useAllMessages();
+  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot);
+  const listings = useListings();
+
+  return useMemo(() => {
+    const summaries = conversations
+      .filter((conversation) => conversation.participantIds.includes(currentUser.id))
+      .map((conversation) => {
+        const otherId = conversation.participantIds.find((id) => id !== currentUser.id);
+        const thread = messages.filter((message) => message.conversationId === conversation.id);
+        const otherUser = users.find((user) => user.id === otherId);
+        return {
+          conversation,
+          otherUserName: otherUser?.name ?? 'Unknown',
+          otherUserAvatarUrl: otherUser?.avatarUrl,
+          listing: listings.find((listing) => listing.id === conversation.listingId),
+          lastMessage: thread.at(-1),
+        };
+      });
+    const activity = (summary: ConversationSummary) =>
+      summary.lastMessage?.createdAt ?? summary.conversation.createdAt;
+    return summaries.sort((a, b) => activity(b).localeCompare(activity(a)));
+  }, [conversations, messages, users, listings, currentUser.id]);
+}
+
+export function useConversation(id: string | undefined) {
+  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot);
+  return useMemo(() => conversations.find((conversation) => conversation.id === id), [conversations, id]);
+}
+
+/** Messages in a conversation, oldest first. */
+export function useMessages(conversationId: string | undefined) {
+  const messages = useAllMessages();
+  return useMemo(
+    () => messages.filter((message) => message.conversationId === conversationId),
+    [messages, conversationId]
+  );
+}
