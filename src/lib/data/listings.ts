@@ -1,21 +1,26 @@
 /**
- * Listing data access. Screens and hooks import from here, never from mock-data directly,
- * so this file is the one place to swap in Supabase later.
+ * Listing data access. Screens and hooks import from here; reads come from the store that
+ * sync.ts fills at sign-in, writes go to Supabase and then update the store.
  */
+import { supabase } from '../supabase';
 import { assertCanTransact } from './moderation';
+import { uploadPhotos } from './photos';
 import { rentalsStore } from './rentals-store';
+import { toListing, unwrap, type ListingRow } from './rows';
 import { getCurrentUserId } from './session';
-import { MOCK_LISTINGS } from './mock-data';
 import { createStore } from './store';
 import type { Listing, ListingFilters, ListingSort, NewListing, Rental } from './types';
 
-const listingsStore = createStore<Listing[]>(
-  [...MOCK_LISTINGS].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-);
+const listingsStore = createStore<Listing[]>([]);
 
 export const subscribeToListings = listingsStore.subscribe;
-/** Synchronous snapshot for useSyncExternalStore. Replaced by query caching once there's a backend. */
+/** Synchronous snapshot for useSyncExternalStore. */
 export const getListingsSnapshot = listingsStore.get;
+
+/** Called by sync.ts with every visible listing. Kept newest first. */
+export function setListings(listings: Listing[]) {
+  listingsStore.set([...listings].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+}
 
 export const EMPTY_FILTERS: ListingFilters = {
   query: '',
@@ -99,15 +104,30 @@ export async function getListingsByOwner(ownerId: string): Promise<Listing[]> {
   return listingsStore.get().filter((listing) => listing.ownerId === ownerId);
 }
 
+/** NewListing as database columns, with local photos uploaded first. */
+async function listingColumns(ownerId: string, input: NewListing) {
+  return {
+    title: input.title,
+    description: input.description,
+    category: input.category,
+    events: input.events,
+    size: input.size,
+    price_per_day: input.pricePerDay,
+    image_uris: await uploadPhotos('listing-photos', ownerId, input.imageUris),
+  };
+}
+
 export async function createListing(input: NewListing): Promise<Listing> {
   const ownerId = getCurrentUserId();
   assertCanTransact(ownerId, new Date());
-  const listing: Listing = {
-    ...input,
-    id: `l${Date.now()}`,
-    ownerId,
-    createdAt: new Date().toISOString(),
-  };
+  const row = unwrap(
+    await supabase
+      .from('listings')
+      .insert({ owner_id: ownerId, ...(await listingColumns(ownerId, input)) })
+      .select()
+      .single<ListingRow>()
+  );
+  const listing = toListing(row);
   listingsStore.set([listing, ...listingsStore.get()]);
   return listing;
 }
@@ -140,28 +160,37 @@ function ownListingOrThrow(id: string) {
   return listing;
 }
 
-function replaceListing(updated: Listing) {
+/** Saves changes to one of your listings and puts the result in the store. */
+async function saveListing(id: string, changes: Record<string, unknown>) {
+  const row = unwrap(
+    await supabase.from('listings').update(changes).eq('id', id).select().single<ListingRow>(),
+    ListingError
+  );
+  const updated = toListing(row);
   listingsStore.set(listingsStore.get().map((listing) => (listing.id === updated.id ? updated : listing)));
   return updated;
 }
 
 export async function updateListing(id: string, changes: NewListing) {
-  return replaceListing({ ...ownListingOrThrow(id), ...changes });
+  const listing = ownListingOrThrow(id);
+  return saveListing(id, await listingColumns(listing.ownerId, changes));
 }
 
 export async function setListingPaused(id: string, paused: boolean) {
-  return replaceListing({ ...ownListingOrThrow(id), paused });
+  ownListingOrThrow(id);
+  return saveListing(id, { paused });
 }
 
 export async function toggleBlockedDate(id: string, date: string) {
   const listing = ownListingOrThrow(id);
-  return replaceListing({ ...listing, blockedDates: toggleDate(listing.blockedDates ?? [], date) });
+  return saveListing(id, { blocked_dates: toggleDate(listing.blockedDates ?? [], date) });
 }
 
 /** Deletes a listing and declines any requests still waiting on it. */
 export async function deleteListing(id: string) {
   const listing = ownListingOrThrow(id);
   assertCanDelete(listing, rentalsStore.get());
+  unwrap(await supabase.rpc('delete_listing', { target_id: id }), ListingError);
   rentalsStore.set(
     rentalsStore
       .get()

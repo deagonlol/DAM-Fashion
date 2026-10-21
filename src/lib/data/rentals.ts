@@ -1,14 +1,16 @@
 /**
  * Borrowing: requests, handoffs, returns. The rules live in pure functions (exported for tests)
- * so they can move to the server unchanged; the async functions at the bottom apply them to
- * the in-memory store as the signed-in user. With Supabase, each async function becomes a
- * database function or edge function that re-checks the same rules server-side.
+ * and run first for instant feedback; the async functions at the bottom then call the database
+ * function of the same name (supabase/migrations/*_app_functions.sql), which re-checks them.
  */
+import { supabase } from '../supabase';
 import { getCurrentUserId } from './session';
 import { getListingSnapshot } from './listings';
 import { getOrCreateConversation, sendMessage } from './messages';
 import { assertCanTransact, assertNotBlocked } from './moderation';
 import { rentalsStore } from './rentals-store';
+import { toRental, unwrap, type RentalCodeRow, type RentalRow } from './rows';
+import { upsertById } from './store';
 import type { Listing, PickupSpot, Rental, RentalStatus } from './types';
 
 export class RentalError extends Error {}
@@ -253,9 +255,22 @@ export function getRentalSnapshot(id: string) {
   return rentalsStore.get().find((rental) => rental.id === id);
 }
 
-function replace(updated: Rental) {
-  rentalsStore.set(rentalsStore.get().map((rental) => (rental.id === updated.id ? updated : rental)));
-  return updated;
+export function setRentals(rentals: Rental[]) {
+  rentalsStore.set(rentals);
+}
+
+/**
+ * Puts a rental row from the database in the store, with any handoff code the signed-in
+ * user holds. Used after each change here and for Realtime updates in sync.ts.
+ */
+export async function putRentalRow(row: RentalRow): Promise<Rental> {
+  const codes: RentalCodeRow[] =
+    row.status === 'accepted' || row.status === 'picked_up'
+      ? unwrap(await supabase.from('rental_codes').select('rental_id, kind, code').eq('rental_id', row.id))
+      : [];
+  const rental = toRental(row, codes);
+  rentalsStore.set(upsertById(rentalsStore.get(), rental));
+  return rental;
 }
 
 function findOrThrow(id: string) {
@@ -264,8 +279,11 @@ function findOrThrow(id: string) {
   return rental;
 }
 
-function randomCode() {
-  return String(Math.floor(1000 + Math.random() * 9000));
+/** Runs one of the borrow database functions and stores the updated borrow. */
+async function callRentalFunction(name: string, args: Record<string, unknown>) {
+  const { data, error } = await supabase.rpc(name, args).single<RentalRow>();
+  if (error) throw new RentalError(error.message);
+  return putRentalRow(data);
 }
 
 function formatRange(startDate: string, endDate: string) {
@@ -283,18 +301,12 @@ export async function requestBorrow(request: BorrowRequest & { message?: string 
   assertNotBlocked(borrowerId, listing.ownerId);
   validateRequest(rentalsStore.get(), listing, borrowerId, request, toDateString(new Date()));
 
-  const rental: Rental = {
-    id: `r${Date.now()}`,
-    listingId: listing.id,
-    borrowerId,
-    lenderId: listing.ownerId,
-    startDate: request.startDate,
-    endDate: request.endDate,
-    pickupSpot: request.pickupSpot,
-    status: 'requested',
-    createdAt: new Date().toISOString(),
-  };
-  rentalsStore.set([...rentalsStore.get(), rental]);
+  const rental = await callRentalFunction('request_rental', {
+    target_listing_id: listing.id,
+    start_on: request.startDate,
+    end_on: request.endDate,
+    spot: request.pickupSpot,
+  });
 
   const conversation = await getOrCreateConversation(listing.id);
   const note = request.message?.trim();
@@ -308,36 +320,41 @@ export async function requestBorrow(request: BorrowRequest & { message?: string 
 
 export async function acceptRequest(id: string) {
   assertCanTransact(getCurrentUserId(), new Date());
-  return replace(
-    accept(rentalsStore.get(), findOrThrow(id), getCurrentUserId(), {
-      pickupCode: randomCode(),
-      returnCode: randomCode(),
-    })
-  );
+  // The server generates the codes; these placeholders only let the local check run.
+  accept(rentalsStore.get(), findOrThrow(id), getCurrentUserId(), { pickupCode: '', returnCode: '' });
+  return callRentalFunction('accept_rental', { target_id: id });
 }
 
 export async function declineRequest(id: string) {
-  return replace(decline(findOrThrow(id), getCurrentUserId()));
+  decline(findOrThrow(id), getCurrentUserId());
+  return callRentalFunction('decline_rental', { target_id: id });
 }
 
 export async function cancelBorrow(id: string) {
-  return replace(cancel(findOrThrow(id), getCurrentUserId()));
+  cancel(findOrThrow(id), getCurrentUserId());
+  return callRentalFunction('cancel_rental', { target_id: id });
 }
 
+/**
+ * The person entering a code never has it (only the one showing it does), so the code itself
+ * is only checked on the server.
+ */
 export async function submitPickupCode(id: string, code: string) {
-  return replace(confirmPickup(findOrThrow(id), getCurrentUserId(), code, new Date()));
+  return callRentalFunction('confirm_pickup', { target_id: id, entered_code: code });
 }
 
 export async function submitReturnCode(id: string, code: string) {
-  return replace(confirmReturn(findOrThrow(id), getCurrentUserId(), code, new Date()));
+  return callRentalFunction('confirm_return', { target_id: id, entered_code: code });
 }
 
 export async function reportConditionIssue(id: string, description: string) {
-  return replace(reportIssue(findOrThrow(id), getCurrentUserId(), description, new Date()));
+  reportIssue(findOrThrow(id), getCurrentUserId(), description, new Date());
+  return callRentalFunction('report_condition_issue', { target_id: id, description });
 }
 
 export async function reportMissedPickup(id: string) {
-  return replace(reportNoShow(findOrThrow(id), getCurrentUserId(), new Date()));
+  reportNoShow(findOrThrow(id), getCurrentUserId(), new Date());
+  return callRentalFunction('report_no_show', { target_id: id });
 }
 
 /** Booked date ranges for a listing, for showing availability. */

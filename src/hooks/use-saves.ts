@@ -2,8 +2,14 @@ import { useMemo, useSyncExternalStore } from 'react';
 
 import { useListings } from '@/hooks/use-listings';
 import { useCurrentUser } from '@/hooks/use-session';
-import { getSavesSnapshot, subscribeToSaves } from '@/lib/data/saves';
+import {
+  getSaveCountsSnapshot,
+  getSavesSnapshot,
+  subscribeToSaveCounts,
+  subscribeToSaves,
+} from '@/lib/data/saves';
 
+/** The signed-in user's saves. */
 function useAllSaves() {
   return useSyncExternalStore(subscribeToSaves, getSavesSnapshot);
 }
@@ -11,14 +17,15 @@ function useAllSaves() {
 /** Whether the signed-in user saved the listing, and how many people saved it in total. */
 export function useSaveState(listingId: string) {
   const saves = useAllSaves();
+  const counts = useSyncExternalStore(subscribeToSaveCounts, getSaveCountsSnapshot);
   const user = useCurrentUser();
-  return useMemo(() => {
-    const forListing = saves.filter((save) => save.listingId === listingId);
-    return {
-      isSaved: forListing.some((save) => save.userId === user.id),
-      count: forListing.length,
-    };
-  }, [saves, listingId, user.id]);
+  return useMemo(
+    () => ({
+      isSaved: saves.some((save) => save.listingId === listingId && save.userId === user.id),
+      count: counts[listingId] ?? 0,
+    }),
+    [saves, counts, listingId, user.id]
+  );
 }
 
 /** Listings the user saved, most recently saved first. */

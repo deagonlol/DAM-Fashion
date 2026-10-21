@@ -2,11 +2,12 @@
  * Reviews of people, written after a completed borrow. Double-blind: a review stays hidden
  * until the other person reviews too, or the review window closes, so neither side can
  * retaliate. Rules are pure functions (exported for tests); the async functions at the bottom
- * apply them to the in-memory store as the signed-in user.
+ * check them as the signed-in user, then save to Supabase, whose policies enforce them again.
  */
+import { supabase } from '../supabase';
 import { getCurrentUserId } from './session';
-import { MOCK_REVIEWS } from './mock-data';
 import { getRentalSnapshot, getRentalsSnapshot } from './rentals';
+import { toReview, unwrap, type ReviewRow } from './rows';
 import { createStore } from './store';
 import { REVIEW_TAGS, type Rental, type Review } from './types';
 
@@ -136,23 +137,55 @@ export function addReply(
 
 // ---- Store ---------------------------------------------------------------------------------
 
-const reviewsStore = createStore<Review[]>(MOCK_REVIEWS);
+/** Reviews the signed-in user can see: their own, plus ones the database says are visible. */
+const reviewsStore = createStore<Review[]>([]);
 
 export const subscribeToReviews = reviewsStore.subscribe;
 export const getReviewsSnapshot = reviewsStore.get;
+
+export function setReviews(reviews: Review[]) {
+  reviewsStore.set(reviews);
+}
 
 export async function submitReview(input: ReviewInput): Promise<Review> {
   const rental = getRentalSnapshot(input.rentalId);
   if (!rental) throw new ReviewError('Borrow not found.');
   const review = createReview(rental, getCurrentUserId(), reviewsStore.get(), input, new Date());
-  reviewsStore.set([...reviewsStore.get(), review]);
-  return review;
+  const row = unwrap(
+    await supabase
+      .from('reviews')
+      .insert({
+        rental_id: review.rentalId,
+        reviewer_id: review.reviewerId,
+        reviewee_id: review.revieweeId,
+        reviewee_role: review.revieweeRole,
+        rating: review.rating,
+        tags: review.tags,
+        comment: review.comment,
+      })
+      .select()
+      .single<ReviewRow>(),
+    ReviewError
+  );
+  const saved = toReview(row);
+  reviewsStore.set([...reviewsStore.get(), saved]);
+  return saved;
 }
 
 export async function replyToReview(reviewId: string, text: string): Promise<Review> {
   const review = reviewsStore.get().find((candidate) => candidate.id === reviewId);
   if (!review) throw new ReviewError('Review not found.');
   const updated = addReply(review, getCurrentUserId(), text, reviewsStore.get(), getRentalsSnapshot(), new Date());
-  reviewsStore.set(reviewsStore.get().map((candidate) => (candidate.id === reviewId ? updated : candidate)));
-  return updated;
+  const row = unwrap(
+    await supabase
+      .from('reviews')
+      .update({ reply_text: updated.reply?.text, reply_created_at: updated.reply?.createdAt })
+      .eq('id', reviewId)
+      .select()
+      .single<ReviewRow>(),
+    ReviewError
+  );
+  const saved = toReview(row);
+  reviewsStore.set(reviewsStore.get().map((candidate) => (candidate.id === reviewId ? saved : candidate)));
+  return saved;
 }

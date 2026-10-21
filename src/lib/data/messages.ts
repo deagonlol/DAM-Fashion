@@ -1,21 +1,41 @@
 /**
- * Conversations and messages. With Supabase, new messages would arrive through a Realtime
- * subscription on the messages table instead of this in-memory store.
+ * Conversations and messages. Loaded at sign-in by sync.ts; new ones from other people arrive
+ * through its Realtime subscription.
  */
+import { supabase } from '../supabase';
 import { assertNotBlocked } from './moderation';
 import { getCurrentUserId } from './session';
 import { getListingSnapshot } from './listings';
-import { MOCK_CONVERSATIONS, MOCK_MESSAGES } from './mock-data';
-import { createStore } from './store';
+import { toConversation, toMessage, unwrap, type ConversationRow, type MessageRow } from './rows';
+import { createStore, upsertById } from './store';
 import type { Conversation, Message } from './types';
 
-const conversationsStore = createStore<Conversation[]>(MOCK_CONVERSATIONS);
-const messagesStore = createStore<Message[]>(MOCK_MESSAGES);
+const conversationsStore = createStore<Conversation[]>([]);
+const messagesStore = createStore<Message[]>([]);
 
 export const subscribeToConversations = conversationsStore.subscribe;
 export const getConversationsSnapshot = conversationsStore.get;
 export const subscribeToMessages = messagesStore.subscribe;
 export const getMessagesSnapshot = messagesStore.get;
+
+export function setConversations(conversations: Conversation[]) {
+  conversationsStore.set(conversations);
+}
+
+/** Adds or replaces a conversation, e.g. one someone else just started. */
+export function putConversation(conversation: Conversation) {
+  conversationsStore.set(upsertById(conversationsStore.get(), conversation));
+}
+
+/** Kept oldest first. */
+export function setMessages(messages: Message[]) {
+  messagesStore.set([...messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
+}
+
+/** Adds a message once, even if it arrives both from sending and from Realtime. */
+export function putMessage(message: Message) {
+  setMessages(upsertById(messagesStore.get(), message));
+}
 
 /**
  * Finds the conversation between a listing's owner and a borrower about that listing, or
@@ -47,13 +67,25 @@ export async function getOrCreateConversation(listingId: string, borrowerId?: st
     );
   if (existing) return existing;
 
-  const conversation: Conversation = {
-    id: `c${Date.now()}`,
-    listingId,
-    participantIds: [borrower, listing.ownerId],
-    createdAt: new Date().toISOString(),
-  };
-  conversationsStore.set([...conversationsStore.get(), conversation]);
+  const inserted = await supabase
+    .from('conversations')
+    .insert({ listing_id: listingId, borrower_id: borrower, owner_id: listing.ownerId })
+    .select()
+    .single<ConversationRow>();
+  // 23505 = unique violation: the other person started this chat a moment ago, so use theirs.
+  const row =
+    inserted.error?.code === '23505'
+      ? unwrap(
+          await supabase
+            .from('conversations')
+            .select()
+            .eq('listing_id', listingId)
+            .eq('borrower_id', borrower)
+            .single<ConversationRow>()
+        )
+      : unwrap(inserted);
+  const conversation = toConversation(row);
+  putConversation(conversation);
   return conversation;
 }
 
@@ -64,13 +96,14 @@ export async function sendMessage(conversationId: string, text: string): Promise
     throw new Error('Only people in this conversation can send messages.');
   }
   assertNotBlocked(...conversation.participantIds);
-  const message: Message = {
-    id: `m${Date.now()}`,
-    conversationId,
-    senderId: getCurrentUserId(),
-    text: text.trim(),
-    createdAt: new Date().toISOString(),
-  };
-  messagesStore.set([...messagesStore.get(), message]);
+  const row = unwrap(
+    await supabase
+      .from('messages')
+      .insert({ conversation_id: conversationId, sender_id: getCurrentUserId(), text: text.trim() })
+      .select()
+      .single<MessageRow>()
+  );
+  const message = toMessage(row);
+  putMessage(message);
   return message;
 }

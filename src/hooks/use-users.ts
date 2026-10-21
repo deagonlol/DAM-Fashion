@@ -5,7 +5,6 @@ import { useRentals } from '@/hooks/use-rentals';
 import { useStrikes } from '@/hooks/use-moderation';
 import { useNow } from '@/hooks/use-now';
 import { useReviewsAbout } from '@/hooks/use-reviews';
-import { isUtexasEmail } from '@/lib/data/auth';
 import { badgesFor, type BadgeId } from '@/lib/data/badges';
 import { borrowCount, lendCount } from '@/lib/data/rentals';
 import { averageRating } from '@/lib/data/reviews';
@@ -78,7 +77,8 @@ export function useBadges(userId: string): BadgeId[] {
     () =>
       badgesFor({
         userId,
-        isVerifiedStudent: user ? isUtexasEmail(user.email) : false,
+        // Emails aren't public, but the database only lets @utexas.edu emails sign up.
+        isVerifiedStudent: user !== undefined,
         rentals,
         reviews,
         strikes,

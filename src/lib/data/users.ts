@@ -1,27 +1,25 @@
-import { MOCK_USERS } from './mock-data';
-import { createStore } from './store';
+import { createStore, upsertById } from './store';
 import type { User } from './types';
 
-const usersStore = createStore<User[]>(MOCK_USERS);
+/** Every profile, loaded at sign-in by sync.ts. */
+const usersStore = createStore<User[]>([]);
 
 export const subscribeToUsers = usersStore.subscribe;
 export const getUsersSnapshot = usersStore.get;
+
+export function setUsers(users: User[]) {
+  usersStore.set(users);
+}
 
 export async function getUser(id: string): Promise<User | undefined> {
   return getUserSnapshot(id);
 }
 
-/** Synchronous lookup for mock data. Becomes async with a backend. */
 export function getUserSnapshot(id: string): User | undefined {
   return usersStore.get().find((user) => user.id === id);
 }
 
-export function findUserByEmail(email: string): User | undefined {
-  const normalized = email.trim().toLowerCase();
-  return usersStore.get().find((user) => user.email === normalized);
-}
-
-/** Case-insensitive name search. With Supabase this becomes an ilike query on profiles. */
+/** Case-insensitive name search over loaded profiles. */
 export async function searchUsers(query: string): Promise<User[]> {
   return usersStore.get().filter((user) => userMatches(user, query));
 }
@@ -31,18 +29,7 @@ export function userMatches(user: User, query: string) {
   return user.name.toLowerCase().includes(normalized);
 }
 
-export function addUser(user: User) {
-  usersStore.set([...usersStore.get(), user]);
-}
-
-export function updateUser(id: string, patch: Partial<Omit<User, 'id'>>): User | undefined {
-  let updated: User | undefined;
-  usersStore.set(
-    usersStore.get().map((user) => {
-      if (user.id !== id) return user;
-      updated = { ...user, ...patch };
-      return updated;
-    })
-  );
-  return updated;
+/** Adds or replaces a user in the local store (after the database is updated). */
+export function putUser(user: User) {
+  usersStore.set(upsertById(usersStore.get(), user));
 }

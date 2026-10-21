@@ -13,12 +13,13 @@
  *   3+        → banned: can't sign in
  *
  * Rules are pure functions (exported for tests); the async functions at the bottom apply
- * them to the in-memory stores as the signed-in user. With a backend, strikes and penalties
- * are computed server-side and enforced in every write.
+ * them as the signed-in user, then save to Supabase. The database computes the same strikes
+ * (strikes_for in supabase/migrations/*_app_functions.sql) and enforces them on every write.
  */
+import { supabase } from '../supabase';
 import { getCurrentUserId } from './session';
-import { MOCK_BLOCKS, MOCK_REPORTS } from './mock-data';
 import { rentalsStore } from './rentals-store';
+import { toBlock, toReport, unwrap, type BlockRow, type ReportRow } from './rows';
 import { createStore } from './store';
 import type { Block, Rental, Report, ReportReason } from './types';
 import { getUserSnapshot } from './users';
@@ -174,13 +175,26 @@ export function reviewReport(report: Report, decision: 'upheld' | 'dismissed', n
 
 // ---- Stores --------------------------------------------------------------------------------
 
-const reportsStore = createStore<Report[]>(MOCK_REPORTS);
-const blocksStore = createStore<Block[]>(MOCK_BLOCKS);
+/**
+ * Reports the signed-in user filed (every report, for the team), plus upheld reports about
+ * anyone, which count as strikes. See toUpheldReport in rows.ts.
+ */
+const reportsStore = createStore<Report[]>([]);
+/** Blocks either made by or against the signed-in user. */
+const blocksStore = createStore<Block[]>([]);
 
 export const subscribeToReports = reportsStore.subscribe;
 export const getReportsSnapshot = reportsStore.get;
 export const subscribeToBlocks = blocksStore.subscribe;
 export const getBlocksSnapshot = blocksStore.get;
+
+export function setReports(reports: Report[]) {
+  reportsStore.set(reports);
+}
+
+export function setBlocks(blocks: Block[]) {
+  blocksStore.set(blocks);
+}
 
 /** A user's current penalty from the live stores. */
 export function penaltyForUser(userId: string, now: Date) {
@@ -202,8 +216,25 @@ export function assertNotBlocked(a: string, b: string) {
 
 export async function submitReport(input: ReportInput): Promise<Report> {
   const report = createReport(getCurrentUserId(), input, reportsStore.get(), new Date());
-  reportsStore.set([...reportsStore.get(), report]);
-  return report;
+  const row = unwrap(
+    await supabase
+      .from('reports')
+      .insert({
+        reporter_id: report.reporterId,
+        reported_user_id: report.reportedUserId,
+        reason: report.reason,
+        details: report.details,
+        conversation_id: report.conversationId ?? null,
+        rental_id: report.rentalId ?? null,
+        listing_id: report.listingId ?? null,
+      })
+      .select()
+      .single<ReportRow>(),
+    ModerationError
+  );
+  const saved = toReport(row);
+  reportsStore.set([...reportsStore.get(), saved]);
+  return saved;
 }
 
 /** Team only: uphold (adds a strike) or dismiss a report. */
@@ -213,7 +244,17 @@ export async function decideReport(reportId: string, decision: 'upheld' | 'dismi
   }
   const report = reportsStore.get().find((candidate) => candidate.id === reportId);
   if (!report) throw new ModerationError('Report not found.');
-  const updated = reviewReport(report, decision, new Date());
+  const decided = reviewReport(report, decision, new Date());
+  const row = unwrap(
+    await supabase
+      .from('reports')
+      .update({ status: decided.status, reviewed_at: decided.reviewedAt })
+      .eq('id', reportId)
+      .select()
+      .single<ReportRow>(),
+    ModerationError
+  );
+  const updated = toReport(row);
   reportsStore.set(reportsStore.get().map((candidate) => (candidate.id === reportId ? updated : candidate)));
   return updated;
 }
@@ -222,10 +263,18 @@ export async function blockUser(userId: string) {
   const blockerId = getCurrentUserId();
   if (blockerId === userId) throw new ModerationError("You can't block yourself.");
   if (blocksStore.get().some((block) => block.blockerId === blockerId && block.blockedId === userId)) return;
-  blocksStore.set([...blocksStore.get(), { blockerId, blockedId: userId, createdAt: new Date().toISOString() }]);
+  const row = unwrap(
+    await supabase.from('blocks').insert({ blocker_id: blockerId, blocked_id: userId }).select().single<BlockRow>(),
+    ModerationError
+  );
+  blocksStore.set([...blocksStore.get(), toBlock(row)]);
 }
 
 export async function unblockUser(userId: string) {
   const blockerId = getCurrentUserId();
+  unwrap(
+    await supabase.from('blocks').delete().eq('blocker_id', blockerId).eq('blocked_id', userId),
+    ModerationError
+  );
   blocksStore.set(blocksStore.get().filter((block) => !(block.blockerId === blockerId && block.blockedId === userId)));
 }

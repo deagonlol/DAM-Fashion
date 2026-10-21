@@ -1,6 +1,6 @@
 /**
- * Minimal in-memory store for mock data, compatible with useSyncExternalStore.
- * Goes away once data comes from Supabase.
+ * Minimal in-memory store, compatible with useSyncExternalStore. Holds what was loaded from
+ * Supabase (see sync.ts) so screens can read it synchronously.
  */
 export function createStore<T>(initial: T) {
   let state = initial;
@@ -19,4 +19,11 @@ export function createStore<T>(initial: T) {
       };
     },
   };
+}
+
+/** Replaces the item with the same id, or adds it at the end. */
+export function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
+  return items.some((existing) => existing.id === item.id)
+    ? items.map((existing) => (existing.id === item.id ? item : existing))
+    : [...items, item];
 }

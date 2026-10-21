@@ -2,12 +2,14 @@ import { Lora_400Regular, Lora_500Medium, Lora_600SemiBold } from '@expo-google-
 import { PlayfairDisplay_600SemiBold, useFonts } from '@expo-google-fonts/playfair-display';
 import { DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 import { Colors, Fonts } from '@/constants/theme';
 import { useSession } from '@/hooks/use-session';
+import { getAuthReadySnapshot, restoreSession, subscribeToAuthReady } from '@/lib/data/auth';
 
 SplashScreen.preventAutoHideAsync();
+restoreSession();
 
 const navigationTheme: Theme = {
   ...DefaultTheme,
@@ -24,6 +26,7 @@ const navigationTheme: Theme = {
 export default function RootLayout() {
   const session = useSession();
   const signedIn = session !== null;
+  const authReady = useSyncExternalStore(subscribeToAuthReady, getAuthReadySnapshot);
   const [fontsLoaded, fontError] = useFonts({
     PlayfairDisplay_600SemiBold,
     Lora_400Regular,
@@ -31,14 +34,17 @@ export default function RootLayout() {
     Lora_600SemiBold,
   });
 
+  const fontsReady = fontsLoaded || fontError !== null;
+
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    if (fontsReady && authReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsReady, authReady]);
 
-  // If fonts fail to load, render anyway with the system font rather than hang on the splash.
-  if (!fontsLoaded && !fontError) {
+  // Stay on the splash until we know whether someone is signed in. If fonts fail to load,
+  // render anyway with the system font rather than hang.
+  if (!fontsReady || !authReady) {
     return null;
   }
 
