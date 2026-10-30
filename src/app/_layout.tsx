@@ -1,6 +1,11 @@
-import { Lora_400Regular, Lora_500Medium, Lora_600SemiBold } from '@expo-google-fonts/lora';
-import { PlayfairDisplay_600SemiBold, useFonts } from '@expo-google-fonts/playfair-display';
-import { DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
+import {
+  NotoSansTamil_400Regular,
+  NotoSansTamil_500Medium,
+  NotoSansTamil_600SemiBold,
+} from '@expo-google-fonts/noto-sans-tamil';
+import { Outfit_700Bold, useFonts } from '@expo-google-fonts/outfit';
+import { DarkTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useSyncExternalStore } from 'react';
 
@@ -12,14 +17,15 @@ SplashScreen.preventAutoHideAsync();
 restoreSession();
 
 const navigationTheme: Theme = {
-  ...DefaultTheme,
+  ...DarkTheme,
   colors: {
-    ...DefaultTheme.colors,
+    ...DarkTheme.colors,
     primary: Colors.accent,
     background: Colors.background,
     card: Colors.background,
     text: Colors.text,
     border: Colors.border,
+    notification: Colors.accent,
   },
 };
 
@@ -28,10 +34,10 @@ export default function RootLayout() {
   const signedIn = session !== null;
   const authReady = useSyncExternalStore(subscribeToAuthReady, getAuthReadySnapshot);
   const [fontsLoaded, fontError] = useFonts({
-    PlayfairDisplay_600SemiBold,
-    Lora_400Regular,
-    Lora_500Medium,
-    Lora_600SemiBold,
+    Outfit_700Bold,
+    NotoSansTamil_400Regular,
+    NotoSansTamil_500Medium,
+    NotoSansTamil_600SemiBold,
   });
 
   const fontsReady = fontsLoaded || fontError !== null;
@@ -50,13 +56,18 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={navigationTheme}>
+      <StatusBar style="light" />
       <Stack
         screenOptions={{
           headerTitleStyle: { fontFamily: Fonts.heading },
           headerTintColor: Colors.text,
+          headerStyle: { backgroundColor: Colors.background },
+          contentStyle: { backgroundColor: Colors.background },
         }}>
         <Stack.Protected guard={signedIn}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Back' }} />
+          <Stack.Screen name="profile" options={{ title: 'Profile' }} />
+          <Stack.Screen name="list" options={{ title: 'List an item' }} />
           <Stack.Screen name="listing/[id]" options={{ title: '' }} />
           <Stack.Screen name="chat/[id]" options={{ title: '' }} />
           <Stack.Screen name="user/[id]" options={{ title: '' }} />

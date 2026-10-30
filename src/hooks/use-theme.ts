@@ -1,6 +1,6 @@
 import { Colors } from '@/constants/theme';
 
-/** The app is light-only for now, so this always returns the one palette. */
+/** The app is dark-only, matching the Wireframes lime-on-black language. */
 export function useTheme() {
   return Colors;
 }

@@ -24,7 +24,7 @@ export function Button({ title, disabled, variant = 'primary', style, ...rest }:
         styles.button,
         primary
           ? { backgroundColor: theme.accent }
-          : { borderWidth: 1, borderColor: theme.text },
+          : { backgroundColor: theme.backgroundElement },
         (pressed || disabled) && styles.dimmed,
         style,
       ]}
@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   button: {
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.three,
-    borderRadius: 12,
+    borderRadius: 999,
     alignItems: 'center',
   },
   dimmed: {

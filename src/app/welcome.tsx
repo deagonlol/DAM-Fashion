@@ -12,7 +12,9 @@ export default function WelcomeScreen() {
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.content}>
         <View style={styles.hero}>
-          <ThemedText type="subtitle">DAM Fashion</ThemedText>
+          <ThemedText type="subtitle" themeColor="accent">
+            DAM Fashion
+          </ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.tagline}>
             Borrow and lend clothes with other UT students.
           </ThemedText>

@@ -12,7 +12,7 @@ export default function TabLayout() {
       indicatorColor={theme.backgroundElement}
       tintColor={theme.accent}
       labelStyle={{
-        default: { fontFamily: Fonts.bodyMedium },
+        default: { fontFamily: Fonts.bodyMedium, color: theme.textSecondary },
         selected: { fontFamily: Fonts.bodyMedium, color: theme.accent },
       }}>
       <NativeTabs.Trigger name="index">
@@ -20,19 +20,19 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="list">
-        <NativeTabs.Trigger.Label>List</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="plus.circle.fill" md="add_circle" />
-      </NativeTabs.Trigger>
-
       <NativeTabs.Trigger name="inbox">
         <NativeTabs.Trigger.Label>Inbox</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="envelope.fill" md="mail" />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="person.fill" md="person" />
+      <NativeTabs.Trigger name="closet">
+        <NativeTabs.Trigger.Label>Closet</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="tshirt.fill" md="checkroom" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="orders">
+        <NativeTabs.Trigger.Label>Orders</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="bag.fill" md="shopping_bag" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );

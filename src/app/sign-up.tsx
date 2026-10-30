@@ -40,6 +40,7 @@ export default function SignUpScreen() {
         value={name}
         onChangeText={setName}
         placeholder="First and last name"
+        variant="contrast"
         autoComplete="name"
         textContentType="name"
       />
@@ -48,6 +49,7 @@ export default function SignUpScreen() {
         value={email}
         onChangeText={setEmail}
         placeholder="you@utexas.edu"
+        variant="contrast"
         autoCapitalize="none"
         autoComplete="email"
         keyboardType="email-address"
@@ -58,6 +60,7 @@ export default function SignUpScreen() {
         value={password}
         onChangeText={setPassword}
         placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+        variant="contrast"
         secureTextEntry
         autoComplete="new-password"
         textContentType="newPassword"

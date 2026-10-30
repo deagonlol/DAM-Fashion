@@ -26,10 +26,10 @@ export function FilterToggle({ label, count, open, onPress }: FilterToggleProps)
       accessibilityLabel={active ? `${label}, ${count} selected` : label}
       style={[
         styles.chip,
-        { borderColor: active || open ? theme.text : theme.border },
-        active && { backgroundColor: theme.text },
+        { borderColor: active || open ? theme.accent : theme.border },
+        active && { backgroundColor: theme.accent },
       ]}>
-      <ThemedText type="small" style={active && { color: theme.background }}>
+      <ThemedText type="small" style={active && { color: theme.onAccent }}>
         {active ? `${label} · ${count}` : label} {open ? '▴' : '▾'}
       </ThemedText>
     </Pressable>

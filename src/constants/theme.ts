@@ -1,17 +1,19 @@
 /**
- * Light-only palette built from the product spec's colors: sandstone backgrounds,
- * UT dark blue-grey text, and burnt orange for primary actions.
+ * Dark lime palette from the Wireframes file:
+ * Lime #9BA215, Black Primary #0F0F0F, Grey Secondary #292929,
+ * Light Grey #6F6F6F, White Secondary #D9D9D9.
  */
 export const Colors = {
-  text: '#333F48',
-  textSecondary: '#5F6B74',
-  background: '#FBF9F5',
-  backgroundElement: '#F2EEE6',
-  backgroundSelected: '#E8E2D4',
-  border: '#E1DACB',
-  accent: '#BF5700',
-  onAccent: '#FFFFFF',
-  danger: '#B3261E',
+  text: '#D9D9D9',
+  textSecondary: '#6F6F6F',
+  background: '#0F0F0F',
+  backgroundElement: '#292929',
+  backgroundSelected: '#3A3A3A',
+  border: '#292929',
+  accent: '#9BA215',
+  onAccent: '#0F0F0F',
+  danger: '#E85D5D',
+  card: '#FFFFFF',
 } as const;
 
 export type ThemeColor = keyof typeof Colors;
@@ -19,12 +21,13 @@ export type ThemeColor = keyof typeof Colors;
 /**
  * Font family names as loaded in the root layout. Custom fonts need one family per weight
  * (fontWeight doesn't pick a file on Android), so use these instead of fontWeight.
+ * Outfit is the display face; Noto Sans Tamil is the UI/body face.
  */
 export const Fonts = {
-  heading: 'PlayfairDisplay_600SemiBold',
-  body: 'Lora_400Regular',
-  bodyMedium: 'Lora_500Medium',
-  bodySemiBold: 'Lora_600SemiBold',
+  heading: 'Outfit_700Bold',
+  body: 'NotoSansTamil_400Regular',
+  bodyMedium: 'NotoSansTamil_500Medium',
+  bodySemiBold: 'NotoSansTamil_600SemiBold',
 } as const;
 
 export const Spacing = {

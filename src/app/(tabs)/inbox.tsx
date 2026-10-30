@@ -4,6 +4,7 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
+import { ProfileButton } from '@/components/profile-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -18,15 +19,16 @@ export default function InboxScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <ThemedText type="subtitle" themeColor="accent">
+            Inbox
+          </ThemedText>
+          <ProfileButton />
+        </View>
         <FlatList
           data={summaries}
           keyExtractor={(item) => item.conversation.id}
           renderItem={({ item }) => <ConversationRow summary={item} />}
-          ListHeaderComponent={
-            <ThemedText type="subtitle" style={styles.title}>
-              Inbox
-            </ThemedText>
-          }
           ListEmptyComponent={
             <ThemedText themeColor="textSecondary" style={styles.empty}>
               No messages yet. Message an owner from any listing.
@@ -91,7 +93,10 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  title: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.two,

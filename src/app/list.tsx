@@ -7,10 +7,8 @@ import { createListing } from '@/lib/data/listings';
 export default function ListItemScreen() {
   return (
     <ListingForm
-      heading="List an item"
       submitLabel="Post listing"
       resetOnSubmit
-      safeAreaTop
       banner={<RestrictionBanner />}
       onSubmit={async (values) => {
         const listing = await createListing(values);

@@ -157,7 +157,10 @@ export default function ChatScreen() {
                 placeholder="Write a message…"
                 placeholderTextColor={theme.textSecondary}
                 multiline
-                style={[styles.input, { borderColor: theme.border, color: theme.text }]}
+                style={[
+                  styles.input,
+                  { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.border },
+                ]}
               />
               <Pressable
                 onPress={handleSend}
@@ -185,10 +188,10 @@ function MessageBubble({ message, isMine }: { message: Message; isMine: boolean 
       style={[
         styles.bubble,
         isMine
-          ? [styles.mine, { backgroundColor: theme.text }]
+          ? [styles.mine, { backgroundColor: theme.accent }]
           : [styles.theirs, { backgroundColor: theme.backgroundElement }],
       ]}>
-      <ThemedText style={isMine && { color: theme.background }}>{message.text}</ThemedText>
+      <ThemedText style={isMine && { color: theme.onAccent }}>{message.text}</ThemedText>
     </View>
   );
 }

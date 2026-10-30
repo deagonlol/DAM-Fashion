@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChipGroup, MultiChipGroup } from '@/components/chip-group';
 import { FilterPanel, FilterToggle } from '@/components/filter-dropdown';
 import { ListingGrid } from '@/components/listing-grid';
+import { ProfileButton } from '@/components/profile-button';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -107,13 +108,19 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <View style={styles.titleRow}>
-            <ThemedText type="subtitle">DAM Fashion</ThemedText>
-            <ChipGroup options={MODES} value={mode} onChange={(next) => next && setMode(next)} />
+            <ThemedText type="subtitle" themeColor="accent">
+              DAM Fashion
+            </ThemedText>
+            <View style={styles.titleActions}>
+              <ChipGroup options={MODES} value={mode} onChange={(next) => next && setMode(next)} />
+              <ProfileButton />
+            </View>
           </View>
           <TextField
+            variant="search"
             value={filters.query}
             onChangeText={(query) => update({ query })}
-            placeholder={mode === 'Items' ? 'Search items, types, or events' : 'Search people by name'}
+            placeholder={mode === 'Items' ? 'Search for outfits, clubs, or events...' : 'Search people by name'}
             returnKeyType="search"
             clearButtonMode="while-editing"
             autoCorrect={false}
@@ -207,6 +214,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  titleActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
   chips: {
