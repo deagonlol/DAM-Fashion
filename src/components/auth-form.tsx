@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { ThemedText } from '@/components/themed-text';
@@ -12,11 +12,25 @@ type AuthFormProps = {
   submitTitle: string;
   canSubmit: boolean;
   onSubmit: () => void;
+  /** Extra button under submit. Not gated on canSubmit (used for skip-login). */
+  secondaryTitle?: string;
+  onSecondary?: () => void;
+  secondaryDisabled?: boolean;
   footer?: ReactNode;
 };
 
 /** Shared layout for the sign-in and sign-up screens. */
-export function AuthForm({ children, error, submitTitle, canSubmit, onSubmit, footer }: AuthFormProps) {
+export function AuthForm({
+  children,
+  error,
+  submitTitle,
+  canSubmit,
+  onSubmit,
+  secondaryTitle,
+  onSecondary,
+  secondaryDisabled,
+  footer,
+}: AuthFormProps) {
   return (
     <ThemedView style={styles.container}>
       <KeyboardAvoidingView
@@ -24,7 +38,7 @@ export function AuthForm({ children, error, submitTitle, canSubmit, onSubmit, fo
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           contentInsetAdjustmentBehavior="automatic">
           {children}
           {error ? (
@@ -32,8 +46,18 @@ export function AuthForm({ children, error, submitTitle, canSubmit, onSubmit, fo
               {error}
             </ThemedText>
           ) : null}
-          <Button title={submitTitle} onPress={onSubmit} disabled={!canSubmit} />
-          {footer}
+          <View style={styles.actions}>
+            <Button title={submitTitle} onPress={onSubmit} disabled={!canSubmit} />
+            {secondaryTitle && onSecondary ? (
+              <Button
+                title={secondaryTitle}
+                variant="secondary"
+                onPress={onSecondary}
+                disabled={secondaryDisabled}
+              />
+            ) : null}
+          </View>
+          {footer ? <View>{footer}</View> : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -47,5 +71,8 @@ const styles = StyleSheet.create({
   content: {
     padding: Spacing.four,
     gap: Spacing.four,
+  },
+  actions: {
+    gap: Spacing.three,
   },
 });

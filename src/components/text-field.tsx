@@ -6,18 +6,27 @@ import { useTheme } from '@/hooks/use-theme';
 
 type TextFieldProps = TextInputProps & {
   label?: string;
+  /** "search" is a dark pill; "contrast" is a light bar on dark screens (sign-in). */
+  variant?: 'field' | 'search' | 'contrast';
 };
 
-export function TextField({ label, style, multiline, ...rest }: TextFieldProps) {
+export function TextField({ label, style, multiline, variant = 'field', ...rest }: TextFieldProps) {
   const theme = useTheme();
+  const search = variant === 'search';
+  const contrast = variant === 'contrast';
 
   const input = (
     <TextInput
-      placeholderTextColor={theme.textSecondary}
+      placeholderTextColor={contrast ? theme.background : theme.textSecondary}
       multiline={multiline}
       style={[
         styles.input,
-        { borderColor: theme.border, color: theme.text },
+        search && styles.search,
+        {
+          backgroundColor: contrast ? theme.text : theme.backgroundElement,
+          color: contrast ? theme.background : theme.text,
+          borderColor: theme.border,
+        },
         multiline && styles.multiline,
         style,
       ]}
@@ -40,12 +49,16 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   input: {
-    borderWidth: 1,
-    borderRadius: 10,
+    borderWidth: 0,
+    borderRadius: 12,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two + Spacing.one,
     fontFamily: Fonts.body,
     fontSize: 16,
+  },
+  search: {
+    borderRadius: 999,
+    paddingVertical: Spacing.two,
   },
   multiline: {
     minHeight: 96,

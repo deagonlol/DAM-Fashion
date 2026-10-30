@@ -26,6 +26,7 @@ import {
   canReportNoShow,
   daysOverdue,
   declineRequest,
+  formatRemainingTime,
   ISSUE_REPORT_WINDOW_HOURS,
   rentalDays,
   reportConditionIssue,
@@ -113,7 +114,14 @@ export default function RentalScreen() {
                 contentFit="cover"
               />
               <View style={styles.flex}>
-                <ThemedText type="smallBold">{listing.title}</ThemedText>
+                <View style={styles.itemTitleRow}>
+                  <ThemedText type="smallBold" style={styles.flex} numberOfLines={1}>
+                    {listing.title}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {listing.size} · {listing.category}
+                  </ThemedText>
+                </View>
                 <ThemedText type="small" themeColor="textSecondary">
                   {role === 'borrower' ? 'You’re borrowing' : 'You’re lending'}
                 </ThemedText>
@@ -187,9 +195,11 @@ export default function RentalScreen() {
 
           {rental.status === 'picked_up' ? (
             <Card>
+              <ThemedText type={late > 0 ? 'smallBold' : undefined} themeColor={late > 0 ? 'danger' : undefined}>
+                {formatRemainingTime(rental, now)}
+              </ThemedText>
               {late > 0 ? (
                 <ThemedText type="smallBold" themeColor="danger">
-                  {late === 1 ? '1 day' : `${late} days`} overdue.{' '}
                   {role === 'borrower'
                     ? 'Return it as soon as you can. Late fees will apply once payments are live.'
                     : `We’ve reminded ${firstName}.`}
@@ -421,6 +431,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
+  },
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: Spacing.two,
   },
   thumb: {
     width: 56,

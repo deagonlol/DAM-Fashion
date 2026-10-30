@@ -64,6 +64,22 @@ export function daysOverdue(rental: Rental, now: Date) {
   return Math.max(1, Math.floor((now.getTime() - dueAt(rental).getTime()) / (24 * 60 * 60 * 1000)));
 }
 
+/** Whole days until dueAt (end of endDate), or 0 if due today or already past due. */
+export function daysUntilDue(rental: Rental, now: Date) {
+  const remaining = dueAt(rental).getTime() - now.getTime();
+  if (remaining <= 0) return 0;
+  return Math.floor(remaining / (24 * 60 * 60 * 1000));
+}
+
+/** Remaining-time copy: "N days left", "Due today", or "N days overdue". */
+export function formatRemainingTime(rental: Rental, now: Date) {
+  const late = daysOverdue(rental, now);
+  if (late > 0) return late === 1 ? '1 day overdue' : `${late} days overdue`;
+  const left = daysUntilDue(rental, now);
+  if (left <= 0) return 'Due today';
+  return left === 1 ? '1 day left' : `${left} days left`;
+}
+
 /** No-shows can be reported once the pickup day has started and the handoff hasn't happened. */
 export function canReportNoShow(rental: Rental, now: Date) {
   return rental.status === 'accepted' && now >= new Date(`${rental.startDate}T00:00:00`);
@@ -244,6 +260,21 @@ export function borrowCount(rentals: Rental[], borrowerId: string) {
 /** Completed lends. */
 export function lendCount(rentals: Rental[], lenderId: string) {
   return rentals.filter((rental) => rental.lenderId === lenderId && rental.status === 'returned').length;
+}
+
+/**
+ * Items currently out (`picked_up`), split by the user's role.
+ * `rented` = user is the borrower; `lent` = user is the lender. Other statuses are omitted.
+ */
+export function outOnBorrow(rentals: Rental[], userId: string) {
+  const rented: Rental[] = [];
+  const lent: Rental[] = [];
+  for (const rental of rentals) {
+    if (rental.status !== 'picked_up') continue;
+    if (rental.borrowerId === userId) rented.push(rental);
+    else if (rental.lenderId === userId) lent.push(rental);
+  }
+  return { rented, lent };
 }
 
 // ---- Store ---------------------------------------------------------------------------------

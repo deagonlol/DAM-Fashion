@@ -27,7 +27,7 @@ export function SaveButton({ listingId, variant = 'overlay' }: SaveButtonProps) 
       hitSlop={8}
       style={({ pressed }) => [
         styles.button,
-        variant === 'overlay' && [styles.overlay, { backgroundColor: theme.background }],
+        variant === 'overlay' && [styles.overlay, { backgroundColor: theme.card }],
         variant === 'inline' && [styles.inline, { borderColor: theme.border }],
         pressed && styles.pressed,
       ]}>

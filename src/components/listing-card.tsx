@@ -16,7 +16,11 @@ export function ListingCard({ listing }: { listing: Listing }) {
     <Pressable
       onPress={() => router.push(`/listing/${listing.id}`)}
       accessibilityRole="link"
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: theme.card },
+        pressed && styles.pressed,
+      ]}>
       <View>
         <Image
           source={listing.imageUris[0]}
@@ -27,10 +31,10 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <SaveButton listingId={listing.id} />
       </View>
       <View style={styles.info}>
-        <ThemedText type="smallBold" numberOfLines={1}>
+        <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.background }}>
           {listing.title}
         </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
+        <ThemedText type="small" style={{ color: theme.accent }}>
           {formatPricePerDay(listing.pricePerDay)} · {listing.size}
         </ThemedText>
       </View>
@@ -41,6 +45,8 @@ export function ListingCard({ listing }: { listing: Listing }) {
 const styles = StyleSheet.create({
   card: {
     flex: 1,
+    borderRadius: 24,
+    overflow: 'hidden',
   },
   pressed: {
     opacity: 0.7,
@@ -48,10 +54,11 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     aspectRatio: 3 / 4,
-    borderRadius: 12,
   },
   info: {
+    paddingHorizontal: Spacing.two,
     paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
     gap: Spacing.half,
   },
 });

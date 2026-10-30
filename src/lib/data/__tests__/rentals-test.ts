@@ -8,9 +8,12 @@ import {
   confirmPickup,
   confirmReturn,
   daysOverdue,
+  daysUntilDue,
   decline,
+  formatRemainingTime,
   isOverdue,
   lendCount,
+  outOnBorrow,
   rangesOverlap,
   rentalDays,
   RentalError,
@@ -198,6 +201,58 @@ describe('late returns', () => {
   it('only applies while the item is out', () => {
     expect(isOverdue({ ...out, status: 'returned' }, local('2026-10-30T12:00:00'))).toBe(false);
     expect(daysOverdue({ ...out, status: 'returned' }, local('2026-10-30T12:00:00'))).toBe(0);
+  });
+});
+
+describe('daysUntilDue', () => {
+  const out = rental({ status: 'picked_up', endDate: '2026-10-21' });
+
+  it('counts whole days until the end of the return date', () => {
+    expect(daysUntilDue(out, local('2026-10-18T12:00:00'))).toBe(3);
+    expect(daysUntilDue(out, local('2026-10-19T12:00:00'))).toBe(2);
+    expect(daysUntilDue(out, local('2026-10-20T12:00:00'))).toBe(1);
+  });
+
+  it('is 0 on the due date, during grace, and once overdue', () => {
+    expect(daysUntilDue(out, local('2026-10-21T12:00:00'))).toBe(0);
+    expect(daysUntilDue(out, local('2026-10-21T23:00:00'))).toBe(0);
+    expect(daysUntilDue(out, local('2026-10-22T01:30:00'))).toBe(0);
+    expect(daysUntilDue(out, local('2026-10-22T02:30:00'))).toBe(0);
+    expect(daysUntilDue(out, local('2026-10-25T12:00:00'))).toBe(0);
+  });
+});
+
+describe('formatRemainingTime', () => {
+  const out = rental({ status: 'picked_up', endDate: '2026-10-21' });
+
+  it('says how many days are left, due today, or overdue', () => {
+    expect(formatRemainingTime(out, local('2026-10-18T12:00:00'))).toBe('3 days left');
+    expect(formatRemainingTime(out, local('2026-10-20T12:00:00'))).toBe('1 day left');
+    expect(formatRemainingTime(out, local('2026-10-21T12:00:00'))).toBe('Due today');
+    expect(formatRemainingTime(out, local('2026-10-22T01:30:00'))).toBe('Due today');
+    expect(formatRemainingTime(out, local('2026-10-22T02:30:00'))).toBe('1 day overdue');
+    expect(formatRemainingTime(out, local('2026-10-25T12:00:00'))).toBe('3 days overdue');
+  });
+});
+
+describe('outOnBorrow', () => {
+  it('splits picked_up rentals into rented vs lent for the user', () => {
+    const borrowed = rental({ status: 'picked_up', borrowerId: 'me', lenderId: 'lender' });
+    const lentOut = rental({ status: 'picked_up', borrowerId: 'other', lenderId: 'me' });
+    const result = outOnBorrow([borrowed, lentOut], 'me');
+    expect(result.rented).toEqual([borrowed]);
+    expect(result.lent).toEqual([lentOut]);
+  });
+
+  it('ignores every status except picked_up', () => {
+    const statuses: RentalStatus[] = ['requested', 'accepted', 'declined', 'cancelled', 'returned', 'no_show'];
+    const rentals = statuses.map((status) => rental({ status, borrowerId: 'me', lenderId: 'lender' }));
+    expect(outOnBorrow(rentals, 'me')).toEqual({ rented: [], lent: [] });
+  });
+
+  it('omits items the user is not part of', () => {
+    const other = rental({ status: 'picked_up', borrowerId: 'a', lenderId: 'b' });
+    expect(outOnBorrow([other], 'me')).toEqual({ rented: [], lent: [] });
   });
 });
 

@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
 import { useNow } from '@/hooks/use-now';
-import { getRentalsSnapshot, isOverdue, subscribeToRentals } from '@/lib/data/rentals';
+import { getRentalsSnapshot, isOverdue, outOnBorrow, subscribeToRentals } from '@/lib/data/rentals';
 import { canReview, getReviewsSnapshot, subscribeToReviews } from '@/lib/data/reviews';
 import type { Rental } from '@/lib/data/types';
 
@@ -12,6 +12,17 @@ export function useRentals() {
 export function useRental(id: string | undefined) {
   const rentals = useRentals();
   return useMemo(() => rentals.find((rental) => rental.id === id), [rentals, id]);
+}
+
+/**
+ * Items currently out on a borrow, split into `{ rented, lent }`.
+ * `useNow()` ticks so remaining-time copy stays current.
+ */
+export function useOutOnBorrow(userId: string) {
+  const rentals = useRentals();
+  useNow();
+
+  return useMemo(() => outOnBorrow(rentals, userId), [rentals, userId]);
 }
 
 export type ActivityItem = {

@@ -10,6 +10,8 @@ type ChipGroupProps<T extends string> = {
   onChange: (value: T | null) => void;
   /** Tapping the selected chip clears the selection. */
   allowDeselect?: boolean;
+  /** Full-width lime/dark track, like the Orders Rented | Lent toggle. */
+  variant?: 'chips' | 'segment';
 };
 
 /** Single-select row of chips. */
@@ -18,9 +20,13 @@ export function ChipGroup<T extends string>({
   value,
   onChange,
   allowDeselect = false,
+  variant = 'chips',
 }: ChipGroupProps<T>) {
+  const theme = useTheme();
+  const segment = variant === 'segment';
+
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, segment && [styles.segment, { backgroundColor: theme.backgroundElement }]]}>
       {options.map((option) => {
         const selected = option === value;
         return (
@@ -28,6 +34,7 @@ export function ChipGroup<T extends string>({
             key={option}
             label={option}
             selected={selected}
+            fill={segment}
             onPress={() => onChange(selected && allowDeselect ? null : option)}
           />
         );
@@ -70,9 +77,18 @@ type ChipProps = {
   onPress: () => void;
   accessibilityRole?: 'radio' | 'checkbox' | 'button';
   disabled?: boolean;
+  /** Stretch inside a segmented track. */
+  fill?: boolean;
 };
 
-export function Chip({ label, selected, onPress, accessibilityRole = 'radio', disabled = false }: ChipProps) {
+export function Chip({
+  label,
+  selected,
+  onPress,
+  accessibilityRole = 'radio',
+  disabled = false,
+  fill = false,
+}: ChipProps) {
   const theme = useTheme();
 
   return (
@@ -85,11 +101,16 @@ export function Chip({ label, selected, onPress, accessibilityRole = 'radio', di
       }
       style={[
         styles.chip,
+        fill && styles.segmentChip,
         { borderColor: theme.border },
-        selected && { backgroundColor: theme.text, borderColor: theme.text },
+        fill && { borderWidth: 0 },
+        selected && { backgroundColor: theme.accent, borderColor: theme.accent },
         disabled && styles.disabled,
       ]}>
-      <ThemedText type="small" style={selected && { color: theme.background }}>
+      <ThemedText
+        type="smallBold"
+        style={{ color: selected ? theme.onAccent : theme.text }}
+        numberOfLines={1}>
         {label}
       </ThemedText>
     </Pressable>
@@ -102,6 +123,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.two,
   },
+  segment: {
+    flexWrap: 'nowrap',
+    borderRadius: 999,
+    padding: Spacing.one,
+    gap: Spacing.one,
+  },
   disabled: {
     opacity: 0.35,
   },
@@ -110,5 +137,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     borderRadius: 999,
     borderWidth: 1,
+    alignItems: 'center',
+  },
+  segmentChip: {
+    flex: 1,
+    paddingVertical: Spacing.two + Spacing.half,
   },
 });

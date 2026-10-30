@@ -27,8 +27,8 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontFamily: Fonts.heading,
-    fontSize: 30,
-    lineHeight: 40,
+    fontSize: 28,
+    lineHeight: 34,
   },
   small: {
     fontFamily: Fonts.body,

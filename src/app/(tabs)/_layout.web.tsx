@@ -18,9 +18,9 @@ export default function TabLayout() {
         tabBarLabelStyle: { fontFamily: Fonts.bodyMedium, fontSize: 13 },
       }}>
       <Tabs.Screen name="index" options={{ title: 'Home' }} />
-      <Tabs.Screen name="list" options={{ title: 'List' }} />
       <Tabs.Screen name="inbox" options={{ title: 'Inbox' }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      <Tabs.Screen name="closet" options={{ title: 'Closet' }} />
+      <Tabs.Screen name="orders" options={{ title: 'Orders' }} />
     </Tabs>
   );
 }
