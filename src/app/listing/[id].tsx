@@ -1,18 +1,19 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Avatar } from '@/components/avatar';
 import { TopBadge } from '@/components/badge-row';
 import { Button } from '@/components/button';
+import { ListingCard } from '@/components/listing-card';
 import { PhotoCarousel } from '@/components/photo-carousel';
 import { ReviewCard } from '@/components/review-card';
 import { SaveButton } from '@/components/save-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Fonts, Spacing } from '@/constants/theme';
+import { useBrowseListings } from '@/hooks/use-browse';
 import { useListing } from '@/hooks/use-listings';
 import { useRentals } from '@/hooks/use-rentals';
 import { useSales } from '@/hooks/use-sales';
@@ -20,11 +21,13 @@ import { useListingReviews } from '@/hooks/use-reviews';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser, useUserStats } from '@/hooks/use-users';
+import { EMPTY_FILTERS, similarListings } from '@/lib/data/listings';
 import { getOrCreateConversation } from '@/lib/data/messages';
 import { bookedDays } from '@/lib/data/rentals';
 import { formatPrice, formatPricePerDay } from '@/lib/format';
 
 const REVIEWS_SHOWN = 3;
+const SIMILAR_SHOWN = 4;
 
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,6 +38,7 @@ export default function ListingDetailScreen() {
   const rentals = useRentals();
   const sales = useSales();
   const reviews = useListingReviews(id);
+  const browsable = useBrowseListings(EMPTY_FILTERS, 'Newest');
   const theme = useTheme();
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +66,10 @@ export default function ListingDetailScreen() {
     [sales, id]
   );
   const bookedDates = useMemo(() => bookedDays(rentals, id), [rentals, id]);
+  const similar = useMemo(
+    () => (listing ? similarListings(listing, browsable, SIMILAR_SHOWN) : []),
+    [listing, browsable]
+  );
 
   if (!listing) {
     return (
@@ -84,6 +92,72 @@ export default function ListingDetailScreen() {
     }
   }
 
+  function renderActions() {
+    if (!listing) return null;
+    if (isOwnListing) {
+      return (
+        <>
+          {incomingRequests.length > 0 ? (
+            <Button
+              title={`${incomingRequests.length} borrow request${incomingRequests.length === 1 ? '' : 's'}`}
+              onPress={() => router.push(`/rental/${incomingRequests[0].id}`)}
+            />
+          ) : null}
+          {incomingBuys.length > 0 ? (
+            <Button
+              title={`${incomingBuys.length} buy request${incomingBuys.length === 1 ? '' : 's'}`}
+              onPress={() => router.push(`/sale/${incomingBuys[0].id}`)}
+            />
+          ) : null}
+          <Button title="Manage listing" variant="secondary" onPress={() => router.push(`/manage/${listing.id}`)} />
+        </>
+      );
+    }
+    if (listing.soldAt && !myOpenBorrow) {
+      return (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+          This item has been sold.
+        </ThemedText>
+      );
+    }
+    if (listing.paused && !myOpenBorrow) {
+      return (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+          Not available to borrow right now.
+        </ThemedText>
+      );
+    }
+    const canBuy = listing.salePrice != null && !listing.soldAt;
+    return (
+      <>
+        <Button title="Message Lender" variant="secondary" onPress={openChat} />
+        {canBuy ? (
+          myOpenBuy ? (
+            <Button title="View your buy request" onPress={() => router.push(`/sale/${myOpenBuy.id}`)} />
+          ) : (
+            <Button
+              title={`Buy for ${formatPrice(listing.salePrice!)}`}
+              onPress={() => router.push(`/buy/${listing.id}`)}
+            />
+          )
+        ) : null}
+        {myOpenBorrow ? (
+          <Button
+            title="View your borrow"
+            variant={canBuy ? 'outline' : 'primary'}
+            onPress={() => router.push(`/rental/${myOpenBorrow.id}`)}
+          />
+        ) : (
+          <Button
+            title="Rent"
+            variant={canBuy ? 'outline' : 'primary'}
+            onPress={() => router.push(`/request/${listing.id}`)}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen options={{ title: listing.title }} />
@@ -91,35 +165,58 @@ export default function ListingDetailScreen() {
         <PhotoCarousel uris={listing.imageUris} label={listing.title} />
         <View style={styles.body}>
           <View style={styles.titleRow}>
-            <ThemedText type="subtitle" style={styles.flex}>
-              {listing.title}
+            <ThemedText style={[styles.title, styles.flex]}>{listing.title}</ThemedText>
+            <ThemedText style={styles.price}>{formatPricePerDay(listing.pricePerDay)}</ThemedText>
+          </View>
+          <View style={styles.metaRow}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.flex}>
+              Size {listing.size}
+              {listing.brand ? ` · ${listing.brand}` : ''} · {listing.category}
+              {listing.soldAt ? ' · Sold' : ''}
             </ThemedText>
             <SaveButton listingId={listing.id} variant="inline" />
           </View>
-          <ThemedText type="smallBold">{formatPricePerDay(listing.pricePerDay)}</ThemedText>
-          {listing.salePrice != null ? (
-            <ThemedText type="smallBold">Buy for {formatPrice(listing.salePrice)}</ThemedText>
+
+          {listing.description ? (
+            <View style={styles.section}>
+              <ThemedText type="smallBold">Description</ThemedText>
+              <ThemedText>{listing.description}</ThemedText>
+            </View>
           ) : null}
-          {listing.soldAt ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              Sold
-            </ThemedText>
-          ) : null}
-          <ThemedText type="small" themeColor="textSecondary">
-            {listing.category} · Size {listing.size}
-          </ThemedText>
+
           {listing.events.length > 0 ? (
+            <View style={styles.tags}>
+              {listing.events.map((event) => (
+                <Pressable
+                  key={event}
+                  onPress={() => router.push({ pathname: '/search', params: { event } })}
+                  accessibilityRole="link"
+                  accessibilityLabel={`More ${event} outfits`}
+                  style={({ pressed }) => [styles.tag, { borderColor: theme.border }, pressed && styles.pressed]}>
+                  <ThemedText type="small">{event}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {listing.pickupSpots?.length ? (
             <ThemedText type="small" themeColor="textSecondary">
-              Good for: {listing.events.join(', ')}
+              Pickup at {listing.pickupSpots.join(' or ')}
             </ThemedText>
           ) : null}
-          {listing.description ? <ThemedText>{listing.description}</ThemedText> : null}
 
           {!listing.soldAt ? (
-            <View style={styles.availability}>
+            <View style={styles.section}>
               <ThemedText type="smallBold">Availability</ThemedText>
               <AvailabilityCalendar bookedDates={bookedDates} blockedDates={new Set(listing.blockedDates ?? [])} />
             </View>
+          ) : null}
+
+          <View style={styles.actions}>{renderActions()}</View>
+          {error ? (
+            <ThemedText type="small" themeColor="danger">
+              {error}
+            </ThemedText>
           ) : null}
 
           <Pressable
@@ -173,65 +270,21 @@ export default function ListingDetailScreen() {
               </ThemedText>
             </Pressable>
           ) : null}
-
-          {error ? (
-            <ThemedText type="small" themeColor="danger">
-              {error}
-            </ThemedText>
-          ) : null}
         </View>
-      </ScrollView>
 
-      <SafeAreaView edges={['bottom']} style={[styles.actions, { borderColor: theme.border }]}>
-        {isOwnListing ? (
-          <>
-            <Button
-              title="Manage listing"
-              variant="secondary"
-              style={styles.flex}
-              onPress={() => router.push(`/manage/${listing.id}`)}
-            />
-            {incomingRequests.length > 0 ? (
-              <Button
-                title={`${incomingRequests.length} request${incomingRequests.length === 1 ? '' : 's'}`}
-                style={styles.flex}
-                onPress={() => router.push(`/rental/${incomingRequests[0].id}`)}
-              />
-            ) : null}
-            {incomingBuys.length > 0 ? (
-              <Button
-                title={`${incomingBuys.length} buy request${incomingBuys.length === 1 ? '' : 's'}`}
-                style={styles.flex}
-                onPress={() => router.push(`/sale/${incomingBuys[0].id}`)}
-              />
-            ) : null}
-          </>
-        ) : listing.soldAt && !myOpenBorrow ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.ownNote}>
-            This item has been sold.
-          </ThemedText>
-        ) : listing.paused && !myOpenBorrow ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.ownNote}>
-            Not available to borrow right now.
-          </ThemedText>
-        ) : (
-          <>
-            <Button title="Message" variant="secondary" style={styles.flex} onPress={openChat} />
-            {myOpenBorrow ? (
-              <Button title="View your borrow" style={styles.flex} onPress={() => router.push(`/rental/${myOpenBorrow.id}`)} />
-            ) : (
-              <Button title="Request to borrow" style={styles.flex} onPress={() => router.push(`/request/${listing.id}`)} />
-            )}
-            {listing.salePrice != null && !listing.soldAt ? (
-              myOpenBuy ? (
-                <Button title="View your buy request" style={styles.flex} onPress={() => router.push(`/sale/${myOpenBuy.id}`)} />
-              ) : (
-                <Button title="Request to buy" style={styles.flex} onPress={() => router.push(`/buy/${listing.id}`)} />
-              )
-            ) : null}
-          </>
-        )}
-      </SafeAreaView>
+        {similar.length > 0 ? (
+          <View style={[styles.similar, { backgroundColor: theme.backgroundElement }]}>
+            <ThemedText type="smallBold">Similar items</ThemedText>
+            <View style={styles.grid}>
+              {similar.map((item) => (
+                <View key={item.id} style={styles.cell}>
+                  <ListingCard listing={item} />
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -249,16 +302,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingBottom: Spacing.four,
+    paddingBottom: Spacing.five,
   },
   body: {
     padding: Spacing.three,
-    gap: Spacing.two,
+    gap: Spacing.three,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'baseline',
     gap: Spacing.two,
+  },
+  title: {
+    fontFamily: Fonts.heading,
+    fontSize: 24,
+    lineHeight: 30,
+  },
+  price: {
+    fontFamily: Fonts.bodySemiBold,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    marginTop: -Spacing.two,
+  },
+  section: {
+    gap: Spacing.two,
+  },
+  tags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  tag: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
+  },
+  actions: {
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+  },
+  center: {
+    textAlign: 'center',
+    paddingVertical: Spacing.two,
   },
   nameRow: {
     flexDirection: 'row',
@@ -266,19 +355,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
   },
-  availability: {
-    marginTop: Spacing.three,
-    gap: Spacing.two,
-  },
   reportLink: {
-    marginTop: Spacing.three,
     alignSelf: 'flex-start',
   },
   seller: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    marginTop: Spacing.three,
     paddingTop: Spacing.three,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
@@ -286,21 +369,21 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   reviews: {
-    marginTop: Spacing.three,
     gap: Spacing.three,
   },
-  actions: {
+  similar: {
+    marginTop: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.three,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  ownNote: {
-    flex: 1,
-    textAlign: 'center',
-    paddingVertical: Spacing.two,
+  cell: {
+    width: '47%',
+    flexGrow: 1,
+    maxWidth: '50%',
   },
 });

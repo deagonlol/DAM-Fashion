@@ -31,7 +31,7 @@ export function isUtexasEmail(email: string) {
   return /^[^\s@]+@utexas\.edu$/i.test(email.trim());
 }
 
-export const UTEXAS_EMAIL_ERROR = 'DAM Fashion is only for UT students. Use your @utexas.edu email.';
+export const UTEXAS_EMAIL_ERROR = 'Lendr is only for UT students. Use your @utexas.edu email.';
 
 /** False until restoreSession() has checked for a saved session, so the app doesn't flash sign-in. */
 const authReadyStore = createStore(false);

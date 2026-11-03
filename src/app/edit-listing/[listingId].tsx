@@ -20,11 +20,11 @@ export default function EditListingScreen() {
     );
   }
 
-  const { imageUris, title, description, category, events, size, pricePerDay } = listing;
+  const { imageUris, title, description, category, events, size, brand, pickupSpots, pricePerDay, salePrice } = listing;
 
   return (
     <ListingForm
-      initial={{ imageUris, title, description, category, events, size, pricePerDay }}
+      initial={{ imageUris, title, description, category, events, size, brand, pickupSpots, pricePerDay, salePrice }}
       excludeId={listing.id}
       submitLabel="Save changes"
       onSubmit={async (values) => {

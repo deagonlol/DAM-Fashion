@@ -1,11 +1,11 @@
--- DAM Fashion: test data. Run after the migrations, in the SQL Editor. Safe to re-run.
+-- Lendr: test data. Run after the migrations, in the SQL Editor. Safe to re-run.
 --
 -- Every test account signs in with the password: damfashion
 --   alex.damtest@utexas.edu    sample user with activity in every state
 --   ronit.damtest@utexas.edu   gameday lender
 --   maya.damtest@utexas.edu    trusted lender (formals, boots)
 --   jordan.damtest@utexas.edu  two recent no-shows, so soft-banned
---   admin.damtest@utexas.edu   DAM Fashion team: reviews reports
+--   admin.damtest@utexas.edu   Lendr team: reviews reports
 --   priya / marcus / sofia / ethan / chloe .damtest@utexas.edu
 --
 -- Delete these accounts before launch (Authentication > Users), since the password is public.
@@ -62,7 +62,7 @@ from (values
   ('u2', 'Never miss a home game. Happy to lend gameday fits.', 'https://i.pravatar.cc/200?img=12', null, '2026-01-15'),
   ('u3', 'Formals, festivals, and boots. Pickups near Jester.', 'https://i.pravatar.cc/200?img=47', null, '2025-09-02'),
   ('u4', '', null, null, '2026-07-01'),
-  ('u5', 'The DAM Fashion team.', null, 'admin', '2025-08-01'),
+  ('u5', 'The Lendr team.', null, 'admin', '2025-08-01'),
   ('u6', 'Plan II sophomore. Dresses and little accessories.', 'https://i.pravatar.cc/200?img=45', null, '2026-02-10'),
   ('u7', 'McCombs senior. Suits for every career fair.', 'https://i.pravatar.cc/200?img=53', null, '2025-10-05'),
   ('u8', 'Gowns and western wear. West Campus pickups.', 'https://i.pravatar.cc/200?img=32', null, '2025-11-20'),
@@ -113,9 +113,56 @@ from (values
 on conflict (id) do nothing;
 
 -- Alex's cape can be bought as well as borrowed. Higher than the $6 daily rate.
+update public.listings l
+set sale_price = p.price
+from (values ('l8', 40), ('l16', 120), ('l13', 150)) as p(short_name, price)
+where l.id = pg_temp.sid(p.short_name);
+
+-- Brands, and the pickup spots Maya (near Jester) and Sofia (West Campus) prefer.
+-- Needs 20261103120000_brand_and_pickup_spots.sql. Only fills in listings that don't have them yet.
+update public.listings l
+set brand = b.brand
+from (values
+    ('l1', 'Nike'),
+    ('l2', 'Lulus'),
+    ('l3', 'J.Crew'),
+    ('l4', 'Ariat'),
+    ('l5', 'Dockers'),
+    ('l6', 'Levi''s'),
+    ('l7', 'BaubleBar'),
+    ('l8', 'Party City'),
+    ('l9', 'Banana Republic'),
+    ('l10', 'Reformation'),
+    ('l11', 'Free People'),
+    ('l12', 'Kitsch'),
+    ('l13', 'Suitsupply'),
+    ('l14', 'Dickies'),
+    ('l15', 'Cole Haan'),
+    ('l16', 'Windsor'),
+    ('l17', 'Urban Outfitters'),
+    ('l18', 'Stetson'),
+    ('l19', 'Spirit Halloween'),
+    ('l20', 'Brooks Brothers'),
+    ('l21', 'Champion'),
+    ('l22', 'Abercrombie'),
+    ('l23', 'Zara'),
+    ('l24', 'Steve Madden'),
+    ('l25', 'Spirit Halloween'),
+    ('l26', 'Levi''s'),
+    ('l27', 'Barbarian'),
+    ('l28', 'Madewell'),
+    ('l29', 'The Tie Bar'),
+    ('l30', 'H&M')
+) as b(short_name, brand)
+where l.id = md5('dam-seed-' || b.short_name)::uuid and l.brand = '';
+
 update public.listings
-set sale_price = 40
-where id = pg_temp.sid('l8');
+set pickup_spots = array['Jester Center', 'PCL (Perry-Castañeda Library)']
+where owner_id = md5('dam-seed-u3')::uuid and pickup_spots = '{}';
+
+update public.listings
+set pickup_spots = array['West Campus (Guadalupe & 24th)', 'Speedway Plaza']
+where owner_id = md5('dam-seed-u8')::uuid and pickup_spots = '{}';
 
 -- ---------------------------------------------------------------------------
 -- Borrows. start/end are days from today; picked/returned are days from now.

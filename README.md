@@ -1,56 +1,118 @@
-# Welcome to your Expo app 👋
+# Lendr
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Borrow and lend clothes with other UT Austin students: game day fits, formals, costumes, career fair outfits. Built by a Texas Convergent team.
 
-## Get started
+> "Lendr" is the working name. The repo and some internal names still say DAM Fashion.
 
-1. Install dependencies
+## Features
 
-   ```bash
-   npm install
-   ```
+- **UT-only accounts:** sign-up needs a confirmed `@utexas.edu` email.
+- **Browse and search:** filter by type, event, size and price. Smart search understands typed queries like "black formal dress under $15". You can also search by photo.
+- **Listings:** multiple photos, a daily price, an optional buy price, and an availability calendar the owner can block days on.
+- **Borrowing:** request dates and a pickup spot and offer a daily price. The lender accepts or declines, and pickup and return are confirmed with codes. Late returns are tracked.
+- **Buying:** request to buy a listing outright. Accepting marks it sold.
+- **Chat:** one conversation per listing.
+- **Profiles:** reviews and replies, badges, and a closet of saved items.
+- **Safety:** report users, listings or individual messages, with photo proof. Block users. Strikes lead to a warning, then a 7-day limit, then a ban. The team reviews reports in an admin queue.
+- **Account:** password reset and account deletion.
 
-2. Start the app
+## Tech stack
 
-   ```bash
-   npx expo start
-   ```
+| | |
+|---|---|
+| App | [Expo](https://docs.expo.dev/versions/v57.0.0/) SDK 57, React Native, TypeScript |
+| Navigation | [Expo Router](https://docs.expo.dev/router/introduction/) (file-based, in `src/app/`) |
+| Backend | [Supabase](https://supabase.com): Postgres with row-level security, Auth, Storage, Realtime |
+| Photo search | Any OpenAI-compatible vision API. Defaults to [Ollama](https://ollama.com) running `qwen2.5vl:3b` locally. |
+| Tests | Jest (`jest-expo`) |
 
-In the output, you'll find options to open the app in a
+## Getting started
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+### 1. Install
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Environment variables
 
-### Other setup steps
+Create `.env.local` in the project root. It's ignored by git.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key>
 
-## Learn more
+# Optional: photo search. Defaults shown.
+# EXPO_PUBLIC_VISION_URL=http://localhost:11434
+# EXPO_PUBLIC_VISION_MODEL=qwen2.5vl:3b
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Both Supabase values are on the Supabase dashboard under **Connect**. Ask a teammate for access to the project.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 3. Database (new Supabase project only)
 
-## Join the community
+Run each file in `supabase/migrations/` **in order**, **once**, in the Supabase SQL Editor. Then run `supabase/seed.sql` for test data. The shared project already has all of this, so skip this step unless you're setting up your own.
 
-Join our community of developers creating universal apps.
+The test data's dates are relative to the day it was seeded, so they go stale. Before a demo, run `supabase/refresh_demo_dates.sql` in the SQL Editor to move them up to today. It's safe to run any time.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Two more one-off demo scripts live next to it: `demo_brands_and_spots.sql` (brands and lender pickup spots) and `demo_photos.sql` (real clothing photos from Wikimedia Commons, credited in `photo_credits.md`).
+
+### 4. Run
+
+```bash
+npm run web        # browser
+npm run ios        # iOS simulator (needs Xcode)
+npm run android    # Android emulator
+npm start          # dev server; scan the QR code with Expo Go
+```
+
+**Test account:** `alex.damtest@utexas.edu` / `damfashion`, or tap **Skip login**. The other seeded accounts are listed at the top of `supabase/seed.sql`.
+
+### Photo search (optional)
+
+```bash
+brew install ollama
+ollama pull qwen2.5vl:3b
+ollama serve
+```
+
+The first search after starting Ollama takes about 20 seconds while the model loads. To use photo search from a phone, start Ollama with `OLLAMA_HOST=0.0.0.0 ollama serve` and set `EXPO_PUBLIC_VISION_URL` to your computer's local IP address.
+
+## Before you push
+
+```bash
+npx tsc --noEmit   # typecheck
+npm run lint
+npm test
+```
+
+## Project structure
+
+```
+src/
+  app/              Screens. Every file is a route (Expo Router).
+    (tabs)/         Home, Inbox, Closet, Orders
+    _layout.tsx     Root stack and the signed-in / signed-out guard
+  components/       Shared UI (cards, forms, calendar, buttons…)
+  hooks/            React hooks over the data stores
+  lib/
+    supabase.ts     Supabase client
+    data/           All app logic: one file per area (rentals, sales, listings,
+                    moderation, search, auth…). Rules are pure functions with
+                    tests in data/__tests__/. The async functions save to Supabase.
+  constants/
+    theme.ts        Colors and fonts (from the team Figma)
+supabase/
+  migrations/       Database schema, policies and functions, in run order
+  seed.sql          Test accounts and listings
+```
+
+The database also enforces the app's rules, such as who can accept a borrow, strikes and blocks. When you change a rule in `src/lib/data/`, check whether the matching SQL function in `supabase/migrations/` needs the same change.
+
+## Working together
+
+- **Tasks:** [Linear](https://linear.app/dam-fashion), on the **Tech** team (`TEC-*`).
+- **Designs:** the [Wireframes](https://www.figma.com/design/nY5wtwPCkdtW4VrOEpdci4/Wireframes) file in Figma.
+- **Branches:** branch off `main` and open a pull request. Don't commit straight to `main`.
+- **Database changes:** add a new, dated file to `supabase/migrations/`. Don't edit old migrations, since they've already been run on the shared project.
+- **Native folders:** `ios/` and `android/` are generated, so don't create or edit them. Configure native behavior in `app.json`.

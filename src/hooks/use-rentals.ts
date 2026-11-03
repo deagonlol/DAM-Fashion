@@ -1,9 +1,12 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
+import { useListings } from '@/hooks/use-listings';
 import { useNow } from '@/hooks/use-now';
-import { getRentalsSnapshot, isOverdue, outOnBorrow, subscribeToRentals } from '@/lib/data/rentals';
+import { listingMentions } from '@/lib/data/listings';
+import { getRentalsSnapshot, isOverdue, ordersFor, subscribeToRentals } from '@/lib/data/rentals';
 import { canReview, getReviewsSnapshot, subscribeToReviews } from '@/lib/data/reviews';
 import type { Rental } from '@/lib/data/types';
+import { getUsersSnapshot, subscribeToUsers } from '@/lib/data/users';
 
 export function useRentals() {
   return useSyncExternalStore(subscribeToRentals, getRentalsSnapshot);
@@ -15,14 +18,25 @@ export function useRental(id: string | undefined) {
 }
 
 /**
- * Items currently out on a borrow, split into `{ rented, lent }`.
- * `useNow()` ticks so remaining-time copy stays current.
+ * The user's borrows on one side, split into `{ active, past }` for the Orders tab. A search
+ * matches the item or the other person's name.
  */
-export function useOutOnBorrow(userId: string) {
+export function useOrders(userId: string, role: 'borrower' | 'lender', query = '') {
   const rentals = useRentals();
-  useNow();
-
-  return useMemo(() => outOnBorrow(rentals, userId), [rentals, userId]);
+  const listings = useListings();
+  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot);
+  return useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matching = q
+      ? rentals.filter((rental) => {
+          const listing = listings.find((item) => item.id === rental.listingId);
+          const otherId = role === 'borrower' ? rental.lenderId : rental.borrowerId;
+          const other = users.find((user) => user.id === otherId);
+          return (listing && listingMentions(listing, q)) || other?.name.toLowerCase().includes(q);
+        })
+      : rentals;
+    return ordersFor(matching, userId, role);
+  }, [rentals, listings, users, userId, role, query]);
 }
 
 export type ActivityItem = {

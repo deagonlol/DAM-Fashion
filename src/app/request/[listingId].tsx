@@ -1,48 +1,42 @@
+import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Button } from '@/components/button';
-import { Chip, ChipGroup } from '@/components/chip-group';
+import { ChipGroup } from '@/components/chip-group';
 import { RestrictionBanner } from '@/components/restriction-banner';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Fonts, Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
 import { useRentals } from '@/hooks/use-rentals';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
-import { openOfferCount, rangesOverlap, requestBorrow, toDateString } from '@/lib/data/rentals';
+import {
+  bookedDays,
+  MAX_RENTAL_DAYS,
+  openOfferCount,
+  pickRange,
+  rangesOverlap,
+  rentalDays,
+  requestBorrow,
+  type DateRange,
+} from '@/lib/data/rentals';
 import { PICKUP_SPOTS, type PickupSpot } from '@/lib/data/types';
-import { formatDay, formatPrice } from '@/lib/format';
+import { formatDay, formatPrice, formatPricePerDay } from '@/lib/format';
 
-const DAYS_AHEAD = 21;
-const DURATIONS = [1, 2, 3, 5, 7];
-
-function addDays(date: string, days: number) {
-  const result = new Date(`${date}T00:00:00`);
-  result.setDate(result.getDate() + days);
-  return toDateString(result);
-}
-
-function dayLabel(date: string, index: number) {
-  if (index === 0) return 'Today';
-  if (index === 1) return 'Tomorrow';
-  return new Date(`${date}T00:00:00`).toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' });
-}
-
-/** Pick dates and a pickup spot, then send a borrow request to the lender. */
+/** Pick dates on the calendar and a pickup spot, then send a borrow request to the lender. */
 export default function RequestBorrowScreen() {
   const { listingId } = useLocalSearchParams<{ listingId: string }>();
   const listing = useListing(listingId);
   const rentals = useRentals();
   const user = useCurrentUser();
   const theme = useTheme();
-  const [today] = useState(() => toDateString(new Date()));
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [days, setDays] = useState(1);
+  const [range, setRange] = useState<DateRange | null>(null);
   const [pickupSpot, setPickupSpot] = useState<PickupSpot | null>(null);
   const [message, setMessage] = useState('');
   const [offer, setOffer] = useState('');
@@ -62,8 +56,7 @@ export default function RequestBorrowScreen() {
   const isFree = (start: string, end: string) =>
     !booked.some((rental) => rangesOverlap(rental.startDate, rental.endDate, start, end)) &&
     !ownerBlocked.some((date) => date >= start && date <= end);
-
-  const dates = useMemo(() => Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(today, i)), [today]);
+  const bookedDates = useMemo(() => bookedDays(rentals, listingId), [rentals, listingId]);
 
   if (!listing) {
     return (
@@ -73,7 +66,9 @@ export default function RequestBorrowScreen() {
     );
   }
 
-  const endDate = startDate ? addDays(startDate, days - 1) : null;
+  const startDate = range?.startDate ?? null;
+  const endDate = range?.endDate ?? null;
+  const days = range ? rentalDays(range.startDate, range.endDate) : 0;
   const offerText = offer || (listing ? String(listing.pricePerDay) : '');
   const offeredPricePerDay = Number(offerText);
   const offerOk = Number.isFinite(offeredPricePerDay) && listing !== undefined && offeredPricePerDay >= listing.pricePerDay;
@@ -103,57 +98,60 @@ export default function RequestBorrowScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title: 'Request to borrow' }} />
+      <Stack.Screen options={{ title: 'Rent' }} />
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="automatic">
-          <ThemedText type="subtitle">{listing.title}</ThemedText>
+          <View style={styles.item}>
+            <Image
+              source={listing.imageUris[0]}
+              style={[styles.photo, { backgroundColor: theme.backgroundElement }]}
+              contentFit="cover"
+            />
+            <View style={styles.itemInfo}>
+              <ThemedText type="smallBold" numberOfLines={2}>
+                {listing.title}
+              </ThemedText>
+              <ThemedText style={styles.price}>{formatPricePerDay(listing.pricePerDay)}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Size {listing.size}
+                {listing.brand ? ` · ${listing.brand}` : ''} · {listing.category}
+              </ThemedText>
+            </View>
+          </View>
           <RestrictionBanner />
 
           <View style={styles.section}>
-            <ThemedText type="smallBold">Pickup day</ThemedText>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-              {dates.map((date, index) => (
-                <Chip
-                  key={date}
-                  label={dayLabel(date, index)}
-                  selected={date === startDate}
-                  disabled={!isFree(date, date)}
-                  onPress={() => {
-                    setStartDate(date);
-                    // Shorten the borrow if the chosen length would run into a booked day.
-                    if (!isFree(date, addDays(date, days - 1))) setDays(1);
-                  }}
-                />
-              ))}
-            </ScrollView>
-            {booked.length > 0 || ownerBlocked.length > 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Greyed-out days are booked or unavailable.
-              </ThemedText>
-            ) : null}
-          </View>
-
-          <View style={styles.section}>
-            <ThemedText type="smallBold">How long</ThemedText>
-            <View style={styles.wrap}>
-              {DURATIONS.map((length) => (
-                <Chip
-                  key={length}
-                  label={length === 1 ? '1 day' : `${length} days`}
-                  selected={length === days}
-                  disabled={startDate !== null && !isFree(startDate, addDays(startDate, length - 1))}
-                  onPress={() => setDays(length)}
-                />
-              ))}
-            </View>
+            <ThemedText style={styles.heading}>Select dates</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {!range
+                ? 'Tap your pickup day.'
+                : range.startDate === range.endDate
+                  ? `Tap your return day, or keep it to one day. Up to ${MAX_RENTAL_DAYS} days.`
+                  : `Pick up ${formatDay(range.startDate)} · Return by ${formatDay(range.endDate)}`}
+            </ThemedText>
+            <AvailabilityCalendar
+              bookedDates={bookedDates}
+              blockedDates={new Set(ownerBlocked)}
+              selected={range}
+              onSelectDay={(date) => setRange((current) => pickRange(current, date, isFree))}
+            />
           </View>
 
           <View style={styles.section}>
             <ThemedText type="smallBold">Pickup spot</ThemedText>
-            <ChipGroup options={PICKUP_SPOTS} value={pickupSpot} onChange={setPickupSpot} />
+            <ChipGroup
+              options={listing.pickupSpots?.length ? listing.pickupSpots : PICKUP_SPOTS}
+              value={pickupSpot}
+              onChange={setPickupSpot}
+            />
+            {listing.pickupSpots?.length ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                The lender meets at these spots.
+              </ThemedText>
+            ) : null}
           </View>
 
           <TextField
@@ -176,19 +174,24 @@ export default function RequestBorrowScreen() {
             multiline
           />
 
-          {startDate && endDate ? (
-            <View style={[styles.summary, { backgroundColor: theme.backgroundElement }]}>
-              <ThemedText type="small">
-                Pick up {formatDay(startDate)} · Return by {formatDay(endDate)}
-              </ThemedText>
-              <ThemedText type="smallBold">
-                {formatPrice(offeredPricePerDay * days)} total ({days} × {formatPrice(offeredPricePerDay)})
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                In-app payment is coming soon. For now, settle up at pickup.
+          <View style={[styles.summary, { backgroundColor: theme.backgroundElement }]}>
+            <View style={styles.totalRow}>
+              <View style={styles.flex}>
+                <ThemedText style={styles.heading}>Total cost</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {range
+                    ? `${formatPrice(offerOk ? offeredPricePerDay : listing.pricePerDay)}/day × ${days} ${days === 1 ? 'day' : 'days'}`
+                    : 'Price per day × days renting'}
+                </ThemedText>
+              </View>
+              <ThemedText style={styles.total}>
+                {range ? formatPrice((offerOk ? offeredPricePerDay : listing.pricePerDay) * days) : '$'}
               </ThemedText>
             </View>
-          ) : null}
+            <ThemedText type="small" themeColor="textSecondary">
+              In-app payment is coming soon. For now, settle up at pickup.
+            </ThemedText>
+          </View>
 
           {error ? (
             <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">
@@ -218,21 +221,50 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.four,
   },
+  flex: {
+    flex: 1,
+  },
   section: {
     gap: Spacing.two,
   },
-  chips: {
-    gap: Spacing.two,
-  },
-  wrap: {
+  item: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  photo: {
+    width: 88,
+    height: 88,
+    borderRadius: 16,
+  },
+  itemInfo: {
+    flex: 1,
+    gap: Spacing.half,
+  },
+  price: {
+    fontFamily: Fonts.heading,
+    fontSize: 20,
+    lineHeight: 26,
+  },
+  heading: {
+    fontFamily: Fonts.heading,
+    fontSize: 18,
+    lineHeight: 24,
   },
   summary: {
     borderRadius: 12,
     padding: Spacing.three,
-    gap: Spacing.one,
+    gap: Spacing.two,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  total: {
+    fontFamily: Fonts.heading,
+    fontSize: 24,
+    lineHeight: 30,
   },
   footer: {
     padding: Spacing.three,

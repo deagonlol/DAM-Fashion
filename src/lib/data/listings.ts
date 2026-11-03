@@ -41,9 +41,14 @@ function searchTerms(filters: ListingFilters) {
   return query ? [query] : [];
 }
 
+/** Whether a listing's title, description, type, or events mention the search text. */
+export function listingMentions(listing: Listing, query: string) {
+  return matchesFilters(listing, { ...EMPTY_FILTERS, query });
+}
+
 /** Client-side filter. With Supabase this becomes query conditions (ilike, in, overlaps, lte). */
 export function matchesFilters(listing: Listing, filters: ListingFilters) {
-  const haystack = [listing.title, listing.description, listing.category, ...listing.events];
+  const haystack = [listing.title, listing.description, listing.category, listing.brand ?? '', ...listing.events];
   for (const term of searchTerms(filters)) {
     const q = term.toLowerCase();
     if (!haystack.some((text) => text.toLowerCase().includes(q))) return false;
@@ -115,6 +120,27 @@ export async function getListing(id: string): Promise<Listing | undefined> {
   return getListingSnapshot(id);
 }
 
+/** The most-saved listings, newest first among ties. Expects listings newest first. */
+export function trendingListings(listings: Listing[], saveCounts: Record<string, number>, limit: number) {
+  return [...listings].sort((a, b) => (saveCounts[b.id] ?? 0) - (saveCounts[a.id] ?? 0)).slice(0, limit);
+}
+
+/** Other listings with the same type or a shared event, closest matches first. */
+export function similarListings(listing: Listing, listings: Listing[], limit: number) {
+  return listings
+    .filter((other) => other.id !== listing.id)
+    .map((other) => ({
+      other,
+      score:
+        (other.category === listing.category ? 2 : 0) +
+        other.events.filter((event) => listing.events.includes(event)).length,
+    }))
+    .filter((match) => match.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((match) => match.other);
+}
+
 export function getListingSnapshot(id: string): Listing | undefined {
   return listingsStore.get().find((listing) => listing.id === id);
 }
@@ -131,6 +157,8 @@ async function listingColumns(ownerId: string, input: NewListing) {
     category: input.category,
     events: input.events,
     size: input.size,
+    brand: input.brand?.trim() ?? '',
+    pickup_spots: input.pickupSpots ?? [],
     price_per_day: input.pricePerDay,
     sale_price: input.salePrice ?? null,
     image_uris: await uploadPhotos('listing-photos', ownerId, input.imageUris),

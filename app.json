@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "DAM-Fashion",
+    "name": "Lendr",
     "slug": "DAM-Fashion",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -36,8 +36,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "DAM Fashion uses your photos so you can list clothing.",
-          "cameraPermission": false,
+          "photosPermission": "Lendr uses your photos so you can list clothing.",
+          "cameraPermission": "Lendr uses your camera so you can search for clothes with a photo.",
           "microphonePermission": false
         }
       ]
