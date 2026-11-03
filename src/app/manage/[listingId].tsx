@@ -5,15 +5,17 @@ import { ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Button } from '@/components/button';
 import { RentalRow } from '@/components/rental-row';
+import { SaleRow } from '@/components/sale-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
 import { useRentals } from '@/hooks/use-rentals';
+import { useSales } from '@/hooks/use-sales';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { deleteListing, setListingPaused, toggleBlockedDate } from '@/lib/data/listings';
-import { toDateString } from '@/lib/data/rentals';
+import { bookedDays } from '@/lib/data/rentals';
 
 /** Owner tools for one listing: availability calendar, pause, edit, delete, and its borrows. */
 export default function ManageListingScreen() {
@@ -21,27 +23,17 @@ export default function ManageListingScreen() {
   const listing = useListing(listingId);
   const user = useCurrentUser();
   const rentals = useRentals();
+  const sales = useSales();
   const theme = useTheme();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const forListing = useMemo(() => rentals.filter((rental) => rental.listingId === listingId), [rentals, listingId]);
-  const bookedDates = useMemo(() => {
-    const dates = new Set<string>();
-    for (const rental of forListing) {
-      if (rental.status !== 'accepted' && rental.status !== 'picked_up') continue;
-      const day = new Date(`${rental.startDate}T00:00:00`);
-      const end = new Date(`${rental.endDate}T00:00:00`);
-      while (day <= end) {
-        dates.add(toDateString(day));
-        day.setDate(day.getDate() + 1);
-      }
-    }
-    return dates;
-  }, [forListing]);
+  const bookedDates = useMemo(() => bookedDays(forListing, listingId), [forListing, listingId]);
   const openBorrows = forListing
     .filter((rental) => ['requested', 'accepted', 'picked_up'].includes(rental.status))
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const openBuys = sales.filter((sale) => sale.listingId === listingId && sale.status === 'requested');
 
   if (!listing || listing.ownerId !== user.id) {
     return (
@@ -112,6 +104,18 @@ export default function ManageListingScreen() {
             onToggleDay={(date) => run(() => toggleBlockedDate(listing.id, date))}
           />
         </View>
+
+        {openBuys.length > 0 ? (
+          <View style={styles.section}>
+            <ThemedText type="smallBold">Buy requests</ThemedText>
+            {openBuys.map((sale) => (
+              <SaleRow
+                key={sale.id}
+                item={{ sale, role: 'lender', needsAction: 'Respond to buy request', priority: 1 }}
+              />
+            ))}
+          </View>
+        ) : null}
 
         {openBorrows.length > 0 ? (
           <View style={styles.section}>

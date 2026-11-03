@@ -1,5 +1,7 @@
 import {
   accept,
+  bookedDays,
+  openOfferCount,
   borrowCount,
   borrowedListings,
   canReportIssue,
@@ -126,6 +128,21 @@ describe('validateRequest', () => {
   it("doesn't let pending requests from others block dates", () => {
     const pending = [rental({ borrowerId: 'other', status: 'requested' })];
     expect(() => validateRequest(pending, listings[0], 'me', request, today)).not.toThrow();
+  });
+
+  it('refuses an offer under the listed price', () => {
+    expect(() => validateRequest([], listings[0], 'me', { ...request, offeredPricePerDay: 1 }, today)).toThrow(
+      'listed daily price'
+    );
+  });
+
+  it('counts other open offers on the same dates', () => {
+    const pending = [
+      rental({ borrowerId: 'other', status: 'requested' }),
+      rental({ borrowerId: 'later', status: 'requested', startDate: '2026-11-01', endDate: '2026-11-02' }),
+      rental({ borrowerId: 'me', status: 'requested' }),
+    ];
+    expect(openOfferCount(pending, 'a', '2026-10-20', '2026-10-21', 'me')).toBe(1);
   });
 });
 
@@ -376,6 +393,12 @@ describe('availability set by the owner', () => {
     expect(() => validateRequest([], { ...listings[0], paused: true }, 'me', request, today)).toThrow("isn't available");
   });
 
+  it('blocks requests after the item is sold', () => {
+    expect(() => validateRequest([], { ...listings[0], soldAt: '2026-10-16T00:00:00Z' }, 'me', request, today)).toThrow(
+      'has been sold'
+    );
+  });
+
   it('blocks requests touching a day the owner blocked off', () => {
     expect(() => validateRequest([], { ...listings[0], blockedDates: ['2026-10-22'] }, 'me', request, today)).toThrow(
       "isn't lending it"
@@ -392,5 +415,17 @@ describe('recording late returns', () => {
   it('marks a return late only after the grace period', () => {
     expect(confirmReturn(out, 'lender', '2222', local('2026-10-22T01:00:00')).returnedLate).toBe(false);
     expect(confirmReturn(out, 'lender', '2222', local('2026-10-22T03:00:00')).returnedLate).toBe(true);
+  });
+});
+
+describe('booked days', () => {
+  it('lists every day of accepted and active borrows for that listing only', () => {
+    const rentals = [
+      rental({ status: 'accepted', startDate: '2026-10-30', endDate: '2026-11-01' }),
+      rental({ status: 'picked_up', startDate: '2026-11-05', endDate: '2026-11-05' }),
+      rental({ status: 'requested', startDate: '2026-11-10', endDate: '2026-11-11' }),
+      rental({ status: 'accepted', listingId: 'b', startDate: '2026-11-12', endDate: '2026-11-12' }),
+    ];
+    expect([...bookedDays(rentals, 'a')]).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-05']);
   });
 });

@@ -1,8 +1,11 @@
+import { Link } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { AuthForm } from '@/components/auth-form';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
+import { Spacing } from '@/constants/theme';
 import { AuthError, signIn } from '@/lib/data/auth';
 
 const TEST_EMAIL = 'alex.damtest@utexas.edu';
@@ -36,9 +39,16 @@ export default function SignInScreen() {
       onSecondary={() => enter(TEST_EMAIL, TEST_PASSWORD)}
       secondaryDisabled={submitting}
       footer={
-        <ThemedText type="small" themeColor="textSecondary">
-          Test account: {TEST_EMAIL} / {TEST_PASSWORD}
-        </ThemedText>
+        <View style={styles.footer}>
+          <Link href="/forgot-password">
+            <ThemedText type="small" themeColor="accent">
+              Forgot password?
+            </ThemedText>
+          </Link>
+          <ThemedText type="small" themeColor="textSecondary">
+            Test account: {TEST_EMAIL} / {TEST_PASSWORD}
+          </ThemedText>
+        </View>
       }>
       <TextField
         label="UT email"
@@ -64,3 +74,9 @@ export default function SignInScreen() {
     </AuthForm>
   );
 }
+
+const styles = StyleSheet.create({
+  footer: {
+    gap: Spacing.three,
+  },
+});

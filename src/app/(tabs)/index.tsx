@@ -1,3 +1,4 @@
+import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +14,7 @@ import { UserRow } from '@/components/user-row';
 import { Spacing } from '@/constants/theme';
 import { useBrowseListings, useBrowsePeople } from '@/hooks/use-browse';
 import { EMPTY_FILTERS } from '@/lib/data/listings';
+import { describeIntent, parseSearchQuery, type SearchIntent } from '@/lib/data/search';
 import {
   CATEGORIES,
   EVENTS,
@@ -21,6 +23,8 @@ import {
   type ListingFilters,
   type ListingSort,
 } from '@/lib/data/types';
+import { describePhoto } from '@/lib/data/vision-search';
+import { formatPrice } from '@/lib/format';
 
 const MODES = ['Items', 'People'] as const;
 type Mode = (typeof MODES)[number];
@@ -34,8 +38,10 @@ type Panel = 'type' | 'event' | 'size' | 'price' | 'sort';
 export default function HomeScreen() {
   const [mode, setMode] = useState<Mode>('Items');
   const [filters, setFilters] = useState<ListingFilters>(EMPTY_FILTERS);
-  const [sort, setSort] = useState<ListingSort>('Newest');
+  const [sort, setSort] = useState<ListingSort>('For you');
   const [openPanel, setOpenPanel] = useState<Panel | null>(null);
+  const [photoMessage, setPhotoMessage] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const results = useBrowseListings(filters, sort);
   const people = useBrowsePeople(filters.query);
 
@@ -47,6 +53,57 @@ export default function HomeScreen() {
 
   function update(patch: Partial<ListingFilters>) {
     setFilters((current) => ({ ...current, ...patch }));
+  }
+
+  function applyIntent(intent: SearchIntent, query: string) {
+    setPhotoMessage(null);
+    setFilters({
+      query,
+      words: intent.words,
+      interpreted: true,
+      categories: intent.categories,
+      events: intent.events,
+      sizes: intent.sizes,
+      maxPrice: intent.maxPrice,
+    });
+  }
+
+  const understood = [
+    ...filters.events,
+    ...filters.categories,
+    ...filters.sizes,
+    filters.maxPrice !== null ? `under ${formatPrice(filters.maxPrice)}` : null,
+    ...filters.words,
+  ].filter((part): part is string => part !== null);
+  const showUnderstood =
+    filters.interpreted &&
+    (filters.categories.length > 0 ||
+      filters.events.length > 0 ||
+      filters.sizes.length > 0 ||
+      filters.maxPrice !== null);
+
+  async function searchByPhoto() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.4,
+      base64: true,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    if (!asset?.base64) {
+      setPhotoMessage('Could not read that photo.');
+      return;
+    }
+    setPhotoBusy(true);
+    setPhotoMessage(null);
+    try {
+      const intent = await describePhoto(asset.base64, asset.mimeType ?? 'image/jpeg');
+      applyIntent(intent, describeIntent(intent));
+    } catch (e) {
+      setPhotoMessage(e instanceof Error ? e.message : 'Photo search failed.');
+    } finally {
+      setPhotoBusy(false);
+    }
   }
 
   function toggle(panel: Panel) {
@@ -94,7 +151,7 @@ export default function HomeScreen() {
         );
       case 'sort':
         return (
-          <FilterPanel onClear={() => setSort('Newest')} onDone={() => setOpenPanel(null)}>
+          <FilterPanel onClear={() => setSort('For you')} onDone={() => setOpenPanel(null)}>
             <ChipGroup options={SORT_OPTIONS} value={sort} onChange={(next) => next && setSort(next)} />
           </FilterPanel>
         );
@@ -119,12 +176,29 @@ export default function HomeScreen() {
           <TextField
             variant="search"
             value={filters.query}
-            onChangeText={(query) => update({ query })}
-            placeholder={mode === 'Items' ? 'Search for outfits, clubs, or events...' : 'Search people by name'}
+            onChangeText={(query) => (mode === 'Items' ? applyIntent(parseSearchQuery(query), query) : update({ query }))}
+            placeholder={mode === 'Items' ? 'Try “black formal dress under $15”' : 'Search people by name'}
             returnKeyType="search"
             clearButtonMode="while-editing"
             autoCorrect={false}
           />
+          {mode === 'Items' ? (
+            <Pressable onPress={searchByPhoto} accessibilityRole="button" hitSlop={8} disabled={photoBusy}>
+              <ThemedText type="small" themeColor="accent">
+                {photoBusy ? 'Reading photo…' : 'Search by photo'}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+          {photoMessage ? (
+            <ThemedText type="small" themeColor="danger">
+              {photoMessage}
+            </ThemedText>
+          ) : null}
+          {mode === 'Items' && showUnderstood ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Looking for {understood.join(' · ')}
+            </ThemedText>
+          ) : null}
           {mode === 'Items' ? (
             <>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -168,7 +242,10 @@ export default function HomeScreen() {
             </ThemedText>
             {mode === 'Items' && filterCount > 0 ? (
               <Pressable
-                onPress={() => setFilters((current) => ({ ...EMPTY_FILTERS, query: current.query }))}
+                onPress={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setPhotoMessage(null);
+                }}
                 accessibilityRole="button"
                 hitSlop={8}>
                 <ThemedText type="small" themeColor="accent">

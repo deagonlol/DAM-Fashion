@@ -15,6 +15,7 @@ import type {
   Report,
   ReportReason,
   Review,
+  Sale,
   Save,
   Size,
   User,
@@ -38,9 +39,21 @@ export type ListingRow = {
   events: string[];
   size: string;
   price_per_day: number | string;
+  sale_price?: number | string | null;
+  sold_at?: string | null;
   image_uris: string[];
   paused: boolean;
   blocked_dates: string[];
+  created_at: string;
+};
+
+export type SaleRow = {
+  id: string;
+  listing_id: string;
+  buyer_id: string;
+  seller_id: string;
+  price: number | string;
+  status: string;
   created_at: string;
 };
 
@@ -69,6 +82,7 @@ export type RentalRow = {
   returned_late: boolean | null;
   condition_issue: string | null;
   no_show_reported_by: string | null;
+  offered_price_per_day?: number | string | null;
 };
 
 export type RentalCodeRow = { rental_id: string; kind: 'pickup' | 'return'; code: string };
@@ -98,6 +112,9 @@ export type ReportRow = {
   conversation_id: string | null;
   rental_id: string | null;
   listing_id: string | null;
+  message_id: string | null;
+  message_text: string | null;
+  photo_paths: string[] | null;
   created_at: string;
   status: Report['status'];
   reviewed_at: string | null;
@@ -151,10 +168,24 @@ export function toListing(row: ListingRow): Listing {
     events: row.events as EventTag[],
     size: row.size as Size,
     pricePerDay: Number(row.price_per_day),
+    salePrice: row.sale_price == null ? undefined : Number(row.sale_price),
+    soldAt: optional(row.sold_at ?? null),
     imageUris: row.image_uris,
     createdAt: row.created_at,
     paused: row.paused,
     blockedDates: row.blocked_dates,
+  };
+}
+
+export function toSale(row: SaleRow): Sale {
+  return {
+    id: row.id,
+    listingId: row.listing_id,
+    buyerId: row.buyer_id,
+    sellerId: row.seller_id,
+    price: Number(row.price),
+    status: row.status as Sale['status'],
+    createdAt: row.created_at,
   };
 }
 
@@ -190,6 +221,8 @@ export function toRental(row: RentalRow, codes: RentalCodeRow[] = []): Rental {
     endDate: row.end_date,
     // Hidden from people outside the borrow.
     pickupSpot: (row.pickup_spot ?? '') as PickupSpot,
+    offeredPricePerDay:
+      row.offered_price_per_day == null ? undefined : Number(row.offered_price_per_day),
     status: row.status as RentalStatus,
     createdAt: row.created_at,
     pickupCode: code('pickup'),
@@ -234,6 +267,9 @@ export function toReport(row: ReportRow): Report {
     conversationId: optional(row.conversation_id),
     rentalId: optional(row.rental_id),
     listingId: optional(row.listing_id),
+    messageId: optional(row.message_id),
+    messageText: optional(row.message_text),
+    photoPaths: row.photo_paths ?? [],
     createdAt: row.created_at,
     status: row.status,
     reviewedAt: optional(row.reviewed_at),

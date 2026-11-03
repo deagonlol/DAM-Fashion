@@ -72,6 +72,8 @@ export default function RootLayout() {
           <Stack.Screen name="chat/[id]" options={{ title: '' }} />
           <Stack.Screen name="user/[id]" options={{ title: '' }} />
           <Stack.Screen name="request/[listingId]" options={{ title: 'Request to borrow' }} />
+          <Stack.Screen name="buy/[listingId]" options={{ title: 'Request to buy' }} />
+          <Stack.Screen name="sale/[id]" options={{ title: '' }} />
           <Stack.Screen name="rental/[id]" options={{ title: '' }} />
           <Stack.Screen name="review/[rentalId]" options={{ title: 'Review', presentation: 'modal' }} />
           <Stack.Screen name="edit-profile" options={{ title: 'Edit profile', presentation: 'modal' }} />
@@ -85,6 +87,7 @@ export default function RootLayout() {
           <Stack.Screen name="welcome" options={{ headerShown: false, title: 'Back' }} />
           <Stack.Screen name="sign-in" options={{ title: 'Log in' }} />
           <Stack.Screen name="sign-up" options={{ title: 'Sign up' }} />
+          <Stack.Screen name="forgot-password" options={{ title: 'Reset password' }} />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>

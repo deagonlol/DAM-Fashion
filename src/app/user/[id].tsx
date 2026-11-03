@@ -76,7 +76,7 @@ export default function UserProfileScreen() {
       <Stack.Screen options={{ title: user.name }} />
       {section === 'Closet' ? (
         <ListingGrid
-          listings={blockedEitherWay ? [] : listings.filter((listing) => !listing.paused)}
+          listings={blockedEitherWay ? [] : listings.filter((listing) => !listing.paused && !listing.soldAt)}
           emptyText={blockedEitherWay ? 'Hidden because of a block.' : `${firstName}'s closet is empty.`}
           header={header}
         />

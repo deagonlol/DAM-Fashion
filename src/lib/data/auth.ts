@@ -7,7 +7,7 @@ import type { User as AuthUser } from '@supabase/supabase-js';
 
 import { supabase } from '../supabase';
 import { penaltyForUser, restrictionMessage } from './moderation';
-import { uploadPhoto } from './photos';
+import { deleteAllPhotos, uploadPhoto } from './photos';
 import { toUser, unwrap, type ProfileRow } from './rows';
 import { endSession, getCurrentUserId, getSessionSnapshot, startSession } from './session';
 import { createStore } from './store';
@@ -123,6 +123,49 @@ export async function signUp(input: { name: string; email: string; password: str
   return enterApp(data.user);
 }
 
+/**
+ * Emails a reset code. Supabase's "Reset Password" email template must include {{ .Token }}
+ * so the code shows up in the email.
+ */
+export async function sendPasswordReset(email: string) {
+  if (!isUtexasEmail(email)) {
+    throw new AuthError(UTEXAS_EMAIL_ERROR);
+  }
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+  if (error) {
+    throw new AuthError(
+      error.code === 'over_email_send_rate_limit'
+        ? 'Too many emails sent. Wait a few minutes and try again.'
+        : 'Couldn’t send the email. Try again.'
+    );
+  }
+}
+
+/** Checks the emailed code, sets the new password, and signs in. */
+export async function resetPassword(input: { email: string; code: string; password: string }): Promise<User> {
+  const email = input.email.trim().toLowerCase();
+  if (input.password.length < MIN_PASSWORD_LENGTH) {
+    throw new AuthError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  // A code can only be used once, so if setting the password failed last time, reuse that session.
+  const { data: existing } = await supabase.auth.getSession();
+  let authUser = existing.session?.user.email === email ? existing.session.user : null;
+  if (!authUser) {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token: input.code.trim(), type: 'recovery' });
+    if (error || !data.user) {
+      throw new AuthError('That code is wrong or expired. Send a new one.');
+    }
+    authUser = data.user;
+  }
+  const { error } = await supabase.auth.updateUser({ password: input.password });
+  if (error) {
+    throw new AuthError(
+      error.code === 'same_password' ? 'Pick a password different from your old one.' : 'Couldn’t save the password. Try again.'
+    );
+  }
+  return enterApp(authUser);
+}
+
 /** Saves profile changes and updates the stores and session to match. */
 async function saveProfile(changes: Record<string, unknown>) {
   const userId = getCurrentUserId();
@@ -150,6 +193,17 @@ export async function updateProfile(input: { name: string; bio: string }) {
   if (!name) throw new AuthError('Your name can’t be empty.');
   if (bio.length > MAX_BIO_LENGTH) throw new AuthError(`Keep your bio under ${MAX_BIO_LENGTH} characters.`);
   return saveProfile({ name, bio });
+}
+
+/** Deletes the account and everything in it, then signs out. */
+export async function deleteAccount() {
+  const userId = getCurrentUserId();
+  const { error } = await supabase.rpc('delete_account');
+  if (error) throw new AuthError(error.message);
+  // Photos aren't tied to the account in the database, so clear them out too. The account is
+  // already gone if this fails, so don't block signing out on it.
+  await deleteAllPhotos(userId).catch(() => {});
+  await signOut();
 }
 
 export async function signOut() {

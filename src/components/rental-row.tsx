@@ -9,7 +9,7 @@ import type { ActivityItem } from '@/hooks/use-rentals';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser } from '@/hooks/use-users';
 import type { RentalStatus } from '@/lib/data/types';
-import { formatDateRange } from '@/lib/format';
+import { formatDateRange, formatPricePerDay } from '@/lib/format';
 
 export const STATUS_LABELS: Record<RentalStatus, string> = {
   requested: 'Requested',
@@ -47,6 +47,7 @@ export function RentalRow({ item }: { item: ActivityItem }) {
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
           {role === 'borrower' ? 'From' : 'To'} {other?.name ?? 'someone'} · {formatDateRange(rental.startDate, rental.endDate)}
+          {rental.offeredPricePerDay != null ? ` · ${formatPricePerDay(rental.offeredPricePerDay)}` : ''}
         </ThemedText>
         <ThemedText
           type="smallBold"

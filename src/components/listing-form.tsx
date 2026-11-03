@@ -10,7 +10,10 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useListings } from '@/hooks/use-listings';
 import { useTheme } from '@/hooks/use-theme';
+import { suggestedDailyPrice } from '@/lib/data/search';
+import { formatPrice } from '@/lib/format';
 import {
   CATEGORIES,
   EVENTS,
@@ -34,6 +37,8 @@ type ListingFormProps = {
   safeAreaTop?: boolean;
   /** Shown under the heading, e.g. an account restriction notice. */
   banner?: ReactNode;
+  /** Listing being edited, so its own price is not used as a comparison. */
+  excludeId?: string;
 };
 
 /** Photos, details, and price for a listing. Used to create and to edit. */
@@ -45,8 +50,10 @@ export function ListingForm({
   resetOnSubmit = false,
   safeAreaTop = false,
   banner,
+  excludeId,
 }: ListingFormProps) {
   const theme = useTheme();
+  const listings = useListings();
   const [imageUris, setImageUris] = useState<string[]>(initial?.imageUris ?? []);
   const [title, setTitle] = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
@@ -54,17 +61,26 @@ export function ListingForm({
   const [events, setEvents] = useState<EventTag[]>(initial?.events ?? []);
   const [size, setSize] = useState<Size | null>(initial?.size ?? null);
   const [price, setPrice] = useState(initial ? String(initial.pricePerDay) : '');
+  const [salePrice, setSalePrice] = useState(initial?.salePrice != null ? String(initial.salePrice) : '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const suggestion =
+    category && size && events.length > 0
+      ? suggestedDailyPrice(listings, { category, events, size, excludeId })
+      : null;
   const pricePerDay = Number(price);
+  const saleText = salePrice.trim();
+  const saleAmount = saleText === '' ? null : Number(saleText);
+  const saleOk = saleAmount === null || (Number.isFinite(saleAmount) && saleAmount > pricePerDay);
   const isValid =
     imageUris.length > 0 &&
     title.trim().length > 0 &&
     category !== null &&
     size !== null &&
     Number.isFinite(pricePerDay) &&
-    pricePerDay > 0;
+    pricePerDay > 0 &&
+    saleOk;
 
   const photosLeft = MAX_LISTING_PHOTOS - imageUris.length;
 
@@ -99,6 +115,7 @@ export function ListingForm({
     setEvents([]);
     setSize(null);
     setPrice('');
+    setSalePrice('');
   }
 
   async function handleSubmit() {
@@ -114,6 +131,7 @@ export function ListingForm({
         events,
         size,
         pricePerDay,
+        salePrice: saleAmount ?? undefined,
       });
       if (resetOnSubmit) resetForm();
     } catch (e) {
@@ -219,6 +237,27 @@ export function ListingForm({
               placeholder="5"
               keyboardType="decimal-pad"
             />
+            {suggestion !== null ? (
+              <Pressable
+                onPress={() => setPrice(String(suggestion))}
+                accessibilityRole="button"
+                hitSlop={8}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Similar listings are about {formatPrice(suggestion)}/day. Tap to use it.
+                </ThemedText>
+              </Pressable>
+            ) : null}
+
+            <TextField
+              label="Sale price ($, optional)"
+              value={salePrice}
+              onChangeText={setSalePrice}
+              placeholder="40"
+              keyboardType="decimal-pad"
+            />
+            <ThemedText type="small" themeColor={saleText !== '' && !saleOk ? 'danger' : 'textSecondary'}>
+              Leave blank to rent only. A sale price has to be higher than the daily rate.
+            </ThemedText>
 
             {error ? (
               <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">

@@ -8,7 +8,7 @@ import { isBlockedBetween } from '@/lib/data/moderation';
 import type { ListingFilters, ListingSort } from '@/lib/data/types';
 
 /**
- * Listings to show when browsing: filtered and sorted, minus paused listings, listings from
+ * Listings to show when browsing: filtered and sorted, minus paused or sold listings, listings from
  * restricted owners, and anyone the viewer blocked or was blocked by.
  */
 export function useBrowseListings(filters: ListingFilters, sort: ListingSort) {
@@ -21,6 +21,7 @@ export function useBrowseListings(filters: ListingFilters, sort: ListingSort) {
       results.filter(
         (listing) =>
           !listing.paused &&
+          !listing.soldAt &&
           !restricted.has(listing.ownerId) &&
           !isBlockedBetween(blocks, viewer.id, listing.ownerId)
       ),

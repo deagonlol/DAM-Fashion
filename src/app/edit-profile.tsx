@@ -12,7 +12,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
-import { updateProfile, updateProfilePhoto } from '@/lib/data/auth';
+import { deleteAccount, updateProfile, updateProfilePhoto } from '@/lib/data/auth';
 import { MAX_BIO_LENGTH } from '@/lib/data/types';
 
 /** Change your photo, name, and bio. */
@@ -23,6 +23,8 @@ export default function EditProfileScreen() {
   const [bio, setBio] = useState(user.bio ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function changePhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -45,6 +47,23 @@ export default function EditProfileScreen() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setError(null);
+    setDeleting(true);
+    try {
+      // On success the auth guard in the root layout switches back to the welcome screen.
+      await deleteAccount();
+    } catch (e) {
+      setConfirmingDelete(false);
+      setDeleting(false);
+      setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
     }
   }
 
@@ -91,6 +110,20 @@ export default function EditProfileScreen() {
               {error}
             </ThemedText>
           ) : null}
+
+          <View style={[styles.danger, { borderColor: theme.border }]}>
+            <Button
+              title={confirmingDelete ? 'Tap again to delete your account' : 'Delete account'}
+              variant="secondary"
+              disabled={deleting}
+              onPress={handleDelete}
+            />
+            {confirmingDelete ? (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+                Your profile, listings, chats, and reviews will be deleted. This can’t be undone.
+              </ThemedText>
+            ) : null}
+          </View>
         </ScrollView>
 
         <SafeAreaView edges={['bottom']} style={[styles.footer, { borderColor: theme.border }]}>
@@ -118,6 +151,14 @@ const styles = StyleSheet.create({
   },
   counter: {
     textAlign: 'right',
+  },
+  danger: {
+    gap: Spacing.two,
+    paddingTop: Spacing.four,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  center: {
+    textAlign: 'center',
   },
   footer: {
     padding: Spacing.three,

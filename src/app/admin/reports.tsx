@@ -1,6 +1,7 @@
+import { Image } from 'expo-image';
 import { router, Stack } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { STATUS_LABELS } from '@/components/rental-row';
@@ -15,6 +16,7 @@ import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser } from '@/hooks/use-users';
 import { decideReport, type Penalty } from '@/lib/data/moderation';
+import { reportPhotoUrls } from '@/lib/data/photos';
 import type { Report } from '@/lib/data/types';
 import { formatDateRange, formatMessageTime } from '@/lib/format';
 
@@ -111,9 +113,25 @@ function ReportCard({ report }: { report: Report }) {
       </Pressable>
       <ThemedText type="small" themeColor="textSecondary">
         From {reporter?.name ?? 'unknown'}
-        {report.rentalId ? ' · about a borrow' : report.conversationId ? ' · from a chat' : ''}
+        {report.rentalId
+          ? ' · about a borrow'
+          : report.messageId
+            ? ' · about a message'
+            : report.conversationId
+              ? ' · from a chat'
+              : ''}
       </ThemedText>
       <ThemedText>{report.details}</ThemedText>
+
+      {report.messageText ? (
+        <View style={[styles.quote, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Reported message
+          </ThemedText>
+          <ThemedText>{report.messageText}</ThemedText>
+        </View>
+      ) : null}
+      {report.photoPaths && report.photoPaths.length > 0 ? <ReportPhotos paths={report.photoPaths} /> : null}
 
       {rental ? (
         <ThemedText type="small" themeColor="textSecondary">
@@ -156,6 +174,45 @@ function ReportCard({ report }: { report: Report }) {
   );
 }
 
+/** Proof photos, loaded as short-lived links since the bucket is private. */
+function ReportPhotos({ paths }: { paths: string[] }) {
+  const theme = useTheme();
+  const [urls, setUrls] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const key = paths.join('|');
+
+  useEffect(() => {
+    let active = true;
+    reportPhotoUrls(key.split('|'))
+      .then((next) => active && setUrls(next))
+      .catch((e) => active && setError(e instanceof Error ? e.message : 'Couldn’t load the photos.'));
+    return () => {
+      active = false;
+    };
+  }, [key]);
+
+  if (error) {
+    return (
+      <ThemedText type="small" themeColor="danger">
+        {error}
+      </ThemedText>
+    );
+  }
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
+      {urls.map((url) => (
+        <Image
+          key={url}
+          source={url}
+          style={[styles.photo, { backgroundColor: theme.backgroundElement }]}
+          contentFit="cover"
+          accessibilityLabel="Report photo"
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -190,5 +247,18 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: Spacing.two,
+  },
+  quote: {
+    borderRadius: 10,
+    padding: Spacing.three,
+    gap: Spacing.one,
+  },
+  photos: {
+    gap: Spacing.two,
+  },
+  photo: {
+    width: 120,
+    aspectRatio: 3 / 4,
+    borderRadius: 10,
   },
 });

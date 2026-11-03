@@ -1,6 +1,8 @@
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -9,11 +11,12 @@ import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useMessages } from '@/hooks/use-conversations';
 import { useBlockState } from '@/hooks/use-moderation';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser } from '@/hooks/use-users';
-import { blockUser, MAX_REPORT_LENGTH, submitReport } from '@/lib/data/moderation';
+import { blockUser, MAX_REPORT_LENGTH, MAX_REPORT_PHOTOS, submitReport } from '@/lib/data/moderation';
 import { REPORT_REASONS, type ReportReason } from '@/lib/data/types';
 
 type Params = {
@@ -22,11 +25,14 @@ type Params = {
   conversationId?: string;
   rentalId?: string;
   listingId?: string;
+  messageId?: string;
 };
 
 /** Report a user to the DAM Fashion team, with an option to block them too. */
 export default function ReportScreen() {
-  const { userId, reason: initialReason, conversationId, rentalId, listingId } = useLocalSearchParams<Params>();
+  const { userId, reason: initialReason, conversationId, rentalId, listingId, messageId } =
+    useLocalSearchParams<Params>();
+  const reportedMessage = useMessages(conversationId).find((message) => message.id === messageId);
   const reported = useUser(userId);
   const viewer = useCurrentUser();
   const { blockedByMe } = useBlockState(viewer.id, userId);
@@ -35,23 +41,53 @@ export default function ReportScreen() {
     initialReason && (REPORT_REASONS as readonly string[]).includes(initialReason) ? initialReason : null
   );
   const [details, setDetails] = useState('');
+  const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [alsoBlock, setAlsoBlock] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const name = reported?.name ?? 'this person';
   const firstName = name.split(' ')[0];
-  const where = conversationId ? 'your chat' : rentalId ? 'this borrow' : listingId ? 'this listing' : null;
+  const where = messageId
+    ? 'this message'
+    : conversationId
+      ? 'your chat'
+      : rentalId
+        ? 'this borrow'
+        : listingId
+          ? 'this listing'
+          : null;
+  const photosLeft = MAX_REPORT_PHOTOS - photoUris.length;
+
+  async function addPhotos() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: photosLeft,
+      quality: 0.7,
+    });
+    if (!result.canceled) {
+      const picked = result.assets.map((asset) => asset.uri);
+      setPhotoUris((current) => [...current, ...picked].slice(0, MAX_REPORT_PHOTOS));
+    }
+  }
 
   async function handleSubmit() {
     if (!reason) return;
     setError(null);
+    setSubmitting(true);
     try {
-      await submitReport({ reportedUserId: userId, reason, details, conversationId, rentalId, listingId });
+      await submitReport(
+        { reportedUserId: userId, reason, details, conversationId, rentalId, listingId, messageId },
+        photoUris
+      );
       if (alsoBlock) await blockUser(userId);
       setSubmitted(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -84,6 +120,15 @@ export default function ReportScreen() {
             What happened{where ? ` in ${where}` : ''}? Reports are private and reviewed by the DAM Fashion team.
           </ThemedText>
 
+          {reportedMessage ? (
+            <View style={[styles.quote, { backgroundColor: theme.backgroundElement }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {firstName} wrote:
+              </ThemedText>
+              <ThemedText>{reportedMessage.text}</ThemedText>
+            </View>
+          ) : null}
+
           <View style={styles.section}>
             <ThemedText type="smallBold">Reason</ThemedText>
             <ChipGroup options={REPORT_REASONS} value={reason} onChange={setReason} />
@@ -97,6 +142,45 @@ export default function ReportScreen() {
             multiline
             maxLength={MAX_REPORT_LENGTH}
           />
+
+          <View style={styles.section}>
+            <ThemedText type="smallBold">
+              Photos (optional, {photoUris.length}/{MAX_REPORT_PHOTOS})
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Screenshots or photos of damage help us decide. Only our team sees them.
+            </ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
+              {photoUris.map((uri, index) => (
+                <View key={`${uri}-${index}`} style={styles.photo}>
+                  <Image
+                    source={uri}
+                    style={[StyleSheet.absoluteFill, { backgroundColor: theme.backgroundElement }]}
+                    contentFit="cover"
+                  />
+                  <Pressable
+                    onPress={() => setPhotoUris((current) => current.filter((_, i) => i !== index))}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove photo ${index + 1}`}
+                    hitSlop={8}
+                    style={[styles.removeButton, { backgroundColor: theme.text }]}>
+                    <ThemedText type="smallBold" style={[styles.removeText, { color: theme.background }]}>
+                      ✕
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              ))}
+              {photosLeft > 0 ? (
+                <Pressable
+                  onPress={addPhotos}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add photos"
+                  style={[styles.photo, styles.addPhoto, { borderColor: theme.border }]}>
+                  <ThemedText themeColor="textSecondary">+ Add</ThemedText>
+                </Pressable>
+              ) : null}
+            </ScrollView>
+          </View>
 
           {!blockedByMe ? (
             <View style={styles.section}>
@@ -124,7 +208,11 @@ export default function ReportScreen() {
         </ScrollView>
 
         <SafeAreaView edges={['bottom']} style={[styles.footer, { borderColor: theme.border }]}>
-          <Button title="Send report" disabled={!reason || !details.trim()} onPress={handleSubmit} />
+          <Button
+            title={submitting ? 'Sending…' : 'Send report'}
+            disabled={!reason || !details.trim() || submitting}
+            onPress={handleSubmit}
+          />
         </SafeAreaView>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -141,6 +229,40 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: Spacing.two,
+  },
+  quote: {
+    borderRadius: 10,
+    padding: Spacing.three,
+    gap: Spacing.one,
+  },
+  photos: {
+    gap: Spacing.two,
+  },
+  photo: {
+    width: 80,
+    aspectRatio: 3 / 4,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  addPhoto: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeButton: {
+    position: 'absolute',
+    top: Spacing.one,
+    right: Spacing.one,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeText: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   footer: {
     padding: Spacing.three,

@@ -9,11 +9,14 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing Supabase env vars. Check .env.local and restart Expo.');
 }
 
+// On web, Expo also renders each page once on the server, where there's no storage and no session.
+const isServer = typeof window === 'undefined';
+
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    storage: isServer ? undefined : AsyncStorage,
+    autoRefreshToken: !isServer,
+    persistSession: !isServer,
     detectSessionInUrl: false,
   },
 });

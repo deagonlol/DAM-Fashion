@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Listing } from '@/lib/data/types';
-import { formatPricePerDay } from '@/lib/format';
+import { formatPrice, formatPricePerDay } from '@/lib/format';
 
 export function ListingCard({ listing }: { listing: Listing }) {
   const theme = useTheme();
@@ -34,8 +34,12 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.background }}>
           {listing.title}
         </ThemedText>
-        <ThemedText type="small" style={{ color: theme.accent }}>
-          {formatPricePerDay(listing.pricePerDay)} · {listing.size}
+        <ThemedText type="small" numberOfLines={2} style={{ color: theme.accent }}>
+          {listing.soldAt
+            ? 'Sold'
+            : `${formatPricePerDay(listing.pricePerDay)}${
+                listing.salePrice != null ? ` · ${formatPrice(listing.salePrice)} to buy` : ''
+              } · ${listing.size}`}
         </ThemedText>
       </View>
     </Pressable>

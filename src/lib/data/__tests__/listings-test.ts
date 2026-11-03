@@ -93,6 +93,15 @@ describe('sortListings', () => {
     expect(order(sortListings(dated, 'Most relevant', ''))).toEqual(['new', 'mid', 'old']);
   });
 
+  it('ranks For you by the viewer’s events, then newest', () => {
+    const gameday = listing({ id: 'game', events: ['Game Day'], createdAt: '2026-01-01T00:00:00Z' });
+    const plain = listing({ id: 'plain', createdAt: '2026-03-01T00:00:00Z' });
+    expect(
+      order(sortListings([plain, gameday], 'For you', '', { taste: { events: ['Game Day'], categories: [] } }))
+    ).toEqual(['game', 'plain']);
+    expect(order(sortListings([plain, gameday], 'For you', ''))).toEqual(['plain', 'game']);
+  });
+
   it('does not modify the input array', () => {
     const input = [...dated];
     sortListings(input, 'Price: low to high', '');

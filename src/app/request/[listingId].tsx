@@ -12,8 +12,9 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
 import { useRentals } from '@/hooks/use-rentals';
+import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
-import { rangesOverlap, requestBorrow, toDateString } from '@/lib/data/rentals';
+import { openOfferCount, rangesOverlap, requestBorrow, toDateString } from '@/lib/data/rentals';
 import { PICKUP_SPOTS, type PickupSpot } from '@/lib/data/types';
 import { formatDay, formatPrice } from '@/lib/format';
 
@@ -37,12 +38,14 @@ export default function RequestBorrowScreen() {
   const { listingId } = useLocalSearchParams<{ listingId: string }>();
   const listing = useListing(listingId);
   const rentals = useRentals();
+  const user = useCurrentUser();
   const theme = useTheme();
   const [today] = useState(() => toDateString(new Date()));
   const [startDate, setStartDate] = useState<string | null>(null);
   const [days, setDays] = useState(1);
   const [pickupSpot, setPickupSpot] = useState<PickupSpot | null>(null);
   const [message, setMessage] = useState('');
+  const [offer, setOffer] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,14 +74,26 @@ export default function RequestBorrowScreen() {
   }
 
   const endDate = startDate ? addDays(startDate, days - 1) : null;
-  const canSubmit = startDate !== null && endDate !== null && pickupSpot !== null && !submitting;
+  const offerText = offer || (listing ? String(listing.pricePerDay) : '');
+  const offeredPricePerDay = Number(offerText);
+  const offerOk = Number.isFinite(offeredPricePerDay) && listing !== undefined && offeredPricePerDay >= listing.pricePerDay;
+  const competing =
+    listing && startDate && endDate ? openOfferCount(rentals, listing.id, startDate, endDate, user.id) : 0;
+  const canSubmit = startDate !== null && endDate !== null && pickupSpot !== null && offerOk && !submitting;
 
   async function handleSubmit() {
     if (!startDate || !endDate || !pickupSpot || !listing) return;
     setError(null);
     setSubmitting(true);
     try {
-      const rental = await requestBorrow({ listingId: listing.id, startDate, endDate, pickupSpot, message });
+      const rental = await requestBorrow({
+        listingId: listing.id,
+        startDate,
+        endDate,
+        pickupSpot,
+        message,
+        offeredPricePerDay,
+      });
       router.replace(`/rental/${rental.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
@@ -142,6 +157,18 @@ export default function RequestBorrowScreen() {
           </View>
 
           <TextField
+            label="Your offer per day ($)"
+            value={offerText}
+            onChangeText={setOffer}
+            keyboardType="decimal-pad"
+          />
+          <ThemedText type="small" themeColor={offer !== '' && !offerOk ? 'danger' : 'textSecondary'}>
+            {competing > 0
+              ? `${competing} ${competing === 1 ? 'other person wants' : 'other people want'} some of these dates. Offer at least ${formatPrice(listing.pricePerDay)}/day.`
+              : `The listed price is ${formatPrice(listing.pricePerDay)}/day. You can offer more.`}
+          </ThemedText>
+
+          <TextField
             label="Message (optional)"
             value={message}
             onChangeText={setMessage}
@@ -155,7 +182,7 @@ export default function RequestBorrowScreen() {
                 Pick up {formatDay(startDate)} · Return by {formatDay(endDate)}
               </ThemedText>
               <ThemedText type="smallBold">
-                {formatPrice(listing.pricePerDay * days)} total ({days} × {formatPrice(listing.pricePerDay)})
+                {formatPrice(offeredPricePerDay * days)} total ({days} × {formatPrice(offeredPricePerDay)})
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 In-app payment is coming soon. For now, settle up at pickup.

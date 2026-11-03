@@ -72,7 +72,8 @@ export default function RentalScreen() {
 
   const otherName = other?.name ?? (role === 'borrower' ? 'the lender' : 'the borrower');
   const firstName = otherName.split(' ')[0];
-  const total = listing ? listing.pricePerDay * rentalDays(rental.startDate, rental.endDate) : null;
+  const dailyPrice = rental.offeredPricePerDay ?? listing?.pricePerDay;
+  const total = dailyPrice != null ? dailyPrice * rentalDays(rental.startDate, rental.endDate) : null;
   const late = daysOverdue(rental, now);
   const myReview = rentalReviews.find((review) => review.reviewerId === user.id);
   const visibleReviews = rentalReviews.filter((review) => isReviewVisible(review, allReviews, [rental], now));
@@ -152,7 +153,10 @@ export default function RentalScreen() {
 
           {rental.status === 'requested' && role === 'lender' ? (
             <Card>
-              <ThemedText>{firstName} wants to borrow this. Accept to lock in the dates.</ThemedText>
+              <ThemedText>
+                {firstName} wants to borrow this
+                {dailyPrice != null ? ` for ${formatPrice(dailyPrice)}/day` : ''}. Accept to lock in the dates.
+              </ThemedText>
               <View style={styles.row}>
                 <Button title="Decline" variant="secondary" style={styles.flex} onPress={() => run(() => declineRequest(rental.id))} />
                 <Button title="Accept" style={styles.flex} onPress={() => run(() => acceptRequest(rental.id))} />

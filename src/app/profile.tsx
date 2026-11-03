@@ -8,6 +8,7 @@ import { ChipGroup } from '@/components/chip-group';
 import { ListingGrid } from '@/components/listing-grid';
 import { ProfileHeader } from '@/components/profile-header';
 import { RentalRow } from '@/components/rental-row';
+import { SaleRow } from '@/components/sale-row';
 import { RestrictionBanner } from '@/components/restriction-banner';
 import { ReviewList } from '@/components/review-list';
 import { ThemedText } from '@/components/themed-text';
@@ -15,7 +16,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useBorrowedListings, useListingsByOwner } from '@/hooks/use-listings';
 import { useReports } from '@/hooks/use-moderation';
-import { useActivity } from '@/hooks/use-rentals';
+import { useActivity, type ActivityItem } from '@/hooks/use-rentals';
+import { useSaleActivity, type SaleActivity } from '@/hooks/use-sales';
 import { useReviewsAbout } from '@/hooks/use-reviews';
 import { useCurrentUser } from '@/hooks/use-session';
 import { signOut, updateProfilePhoto } from '@/lib/data/auth';
@@ -34,6 +36,9 @@ export default function ProfileScreen() {
   const borrowed = useBorrowedListings(user.id);
   const reviews = useReviewsAbout(user.id);
   const activity = useActivity(user.id);
+  const saleActivity = useSaleActivity(user.id);
+  const lending = activityEntries(activity, saleActivity, 'lender');
+  const borrowing = activityEntries(activity, saleActivity, 'borrower');
   const openReports = useReports().filter((report) => report.status === 'open').length;
   const [section, setSection] = useState<Section>('Closet');
 
@@ -62,12 +67,10 @@ export default function ProfileScreen() {
           <Button title={`Review reports (${openReports} open)`} onPress={() => router.push('/admin/reports')} />
         ) : null}
 
-        {activity.length > 0 ? (
+        {lending.length > 0 || borrowing.length > 0 ? (
           <View style={styles.stack}>
-            <ThemedText type="smallBold">Activity</ThemedText>
-            {activity.map((item) => (
-              <RentalRow key={item.rental.id} item={item} />
-            ))}
+            <ActivityGroup title="Lending" items={lending} />
+            <ActivityGroup title="Borrowing" items={borrowing} />
           </View>
         ) : null}
 
@@ -93,6 +96,38 @@ export default function ProfileScreen() {
         />
       )}
     </ThemedView>
+  );
+}
+
+type ActivityEntry =
+  | { kind: 'borrow'; priority: number; sortKey: string; item: ActivityItem }
+  | { kind: 'sale'; priority: number; sortKey: string; item: SaleActivity };
+
+function activityEntries(borrows: ActivityItem[], sales: SaleActivity[], role: 'lender' | 'borrower') {
+  const entries: ActivityEntry[] = [
+    ...borrows
+      .filter((item) => item.role === role)
+      .map((item) => ({ kind: 'borrow' as const, priority: item.priority, sortKey: item.rental.startDate, item })),
+    ...sales
+      .filter((item) => item.role === role)
+      .map((item) => ({ kind: 'sale' as const, priority: item.priority, sortKey: item.sale.createdAt, item })),
+  ];
+  return entries.sort((a, b) => a.priority - b.priority || a.sortKey.localeCompare(b.sortKey));
+}
+
+function ActivityGroup({ title, items }: { title: string; items: ActivityEntry[] }) {
+  if (items.length === 0) return null;
+  return (
+    <View style={styles.stack}>
+      <ThemedText type="smallBold">{title}</ThemedText>
+      {items.map((entry) =>
+        entry.kind === 'borrow' ? (
+          <RentalRow key={`borrow-${entry.item.rental.id}`} item={entry.item} />
+        ) : (
+          <SaleRow key={`sale-${entry.item.sale.id}`} item={entry.item} />
+        )
+      )}
+    </View>
   );
 }
 

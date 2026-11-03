@@ -17,6 +17,7 @@
  * (strikes_for in supabase/migrations/*_app_functions.sql) and enforces them on every write.
  */
 import { supabase } from '../supabase';
+import { uploadReportPhotos } from './photos';
 import { getCurrentUserId } from './session';
 import { rentalsStore } from './rentals-store';
 import { toBlock, toReport, unwrap, type BlockRow, type ReportRow } from './rows';
@@ -30,6 +31,7 @@ export const STRIKE_WINDOW_DAYS = 180;
 export const SOFT_BAN_DAYS = 7;
 export const LATE_STRIKE_DAYS = 3;
 export const MAX_REPORT_LENGTH = 1000;
+export const MAX_REPORT_PHOTOS = 4;
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -141,6 +143,7 @@ export type ReportInput = {
   conversationId?: string;
   rentalId?: string;
   listingId?: string;
+  messageId?: string;
 };
 
 export function createReport(reporterId: string, input: ReportInput, reports: Report[], now: Date): Report {
@@ -214,8 +217,13 @@ export function assertNotBlocked(a: string, b: string) {
   }
 }
 
-export async function submitReport(input: ReportInput): Promise<Report> {
+/** Files a report, uploading any proof photos (local URIs) first. */
+export async function submitReport(input: ReportInput, photoUris: string[] = []): Promise<Report> {
   const report = createReport(getCurrentUserId(), input, reportsStore.get(), new Date());
+  if (photoUris.length > MAX_REPORT_PHOTOS) {
+    throw new ModerationError(`Add up to ${MAX_REPORT_PHOTOS} photos.`);
+  }
+  const photoPaths = await uploadReportPhotos(report.reporterId, photoUris);
   const row = unwrap(
     await supabase
       .from('reports')
@@ -227,6 +235,9 @@ export async function submitReport(input: ReportInput): Promise<Report> {
         conversation_id: report.conversationId ?? null,
         rental_id: report.rentalId ?? null,
         listing_id: report.listingId ?? null,
+        // Only sent when used, so plain reports still work before the proof migration runs.
+        ...(report.messageId ? { message_id: report.messageId } : {}),
+        ...(photoPaths.length > 0 ? { photo_paths: photoPaths } : {}),
       })
       .select()
       .single<ReportRow>(),

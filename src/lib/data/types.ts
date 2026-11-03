@@ -50,6 +50,10 @@ export type Listing = {
   events: EventTag[];
   size: Size;
   pricePerDay: number;
+  /** One-time buy price. Only set when the owner is willing to sell, and always above the daily rate. */
+  salePrice?: number;
+  /** Set when a buy request is accepted. The item stays in the owner's closet, labeled sold. */
+  soldAt?: string;
   /** Photos of the item from different angles. The first is the cover shown in lists. */
   imageUris: string[];
   createdAt: string;
@@ -59,16 +63,22 @@ export type Listing = {
   blockedDates?: string[];
 };
 
-export type NewListing = Omit<Listing, 'id' | 'ownerId' | 'createdAt' | 'paused' | 'blockedDates'>;
+export type NewListing = Omit<Listing, 'id' | 'ownerId' | 'createdAt' | 'paused' | 'blockedDates' | 'soldAt'>;
 
 export const MAX_LISTING_PHOTOS = 6;
 
-export const SORT_OPTIONS = ['Newest', 'Most relevant', 'Price: low to high', 'Price: high to low'] as const;
+export const SORT_OPTIONS = ['For you', 'Newest', 'Most relevant', 'Price: low to high', 'Price: high to low'] as const;
 export type ListingSort = (typeof SORT_OPTIONS)[number];
 
-/** Empty arrays mean "any". Within a filter, any selected value matches. */
+/**
+ * Empty arrays mean "any". Within a filter, any selected value matches.
+ * When `interpreted` is set, text matching uses `words` instead of the raw query,
+ * so a sentence can fill the chips without having to appear in a title.
+ */
 export type ListingFilters = {
   query: string;
+  words: string[];
+  interpreted: boolean;
   categories: Category[];
   events: EventTag[];
   sizes: Size[];
@@ -125,6 +135,11 @@ export type Rental = {
   startDate: string;
   endDate: string;
   pickupSpot: PickupSpot;
+  /**
+   * Daily price the borrower offered. Omitted for other people's borrows, which are loaded
+   * only for dates and status. The listing price is used when this borrow has none.
+   */
+  offeredPricePerDay?: number;
   status: RentalStatus;
   createdAt: string;
   /**
@@ -142,6 +157,19 @@ export type Rental = {
   conditionIssue?: string;
   /** Who reported the other person didn't show up for pickup. */
   noShowReportedBy?: string;
+};
+
+export type SaleStatus = 'requested' | 'accepted' | 'declined' | 'cancelled';
+
+/** A request to buy a listing outright, at the sale price it had when the request was sent. */
+export type Sale = {
+  id: string;
+  listingId: string;
+  buyerId: string;
+  sellerId: string;
+  price: number;
+  status: SaleStatus;
+  createdAt: string;
 };
 
 export const REVIEW_TAGS = {
@@ -199,6 +227,11 @@ export type Report = {
   conversationId?: string;
   rentalId?: string;
   listingId?: string;
+  /** The chat message being reported, and its text as it was sent. */
+  messageId?: string;
+  messageText?: string;
+  /** Proof photos in the private report-photos bucket, as storage paths. */
+  photoPaths?: string[];
   createdAt: string;
   status: 'open' | 'upheld' | 'dismissed';
   reviewedAt?: string;

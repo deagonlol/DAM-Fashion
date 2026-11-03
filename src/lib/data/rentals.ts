@@ -98,6 +98,8 @@ export type BorrowRequest = {
   startDate: string;
   endDate: string;
   pickupSpot: PickupSpot;
+  /** Daily price the borrower is willing to pay. Must be at least the listed price. */
+  offeredPricePerDay?: number;
 };
 
 /** Throws a RentalError explaining why a borrow request isn't allowed. */
@@ -111,8 +113,14 @@ export function validateRequest(
   if (listing.ownerId === borrowerId) {
     throw new RentalError("You can't borrow your own item.");
   }
+  if (listing.soldAt) {
+    throw new RentalError('This item has been sold.');
+  }
   if (listing.paused) {
     throw new RentalError("This item isn't available to borrow right now.");
+  }
+  if (request.offeredPricePerDay != null && request.offeredPricePerDay < listing.pricePerDay) {
+    throw new RentalError('Offer at least the listed daily price.');
   }
   if (request.startDate < today) {
     throw new RentalError('Pick a pickup date from today on.');
@@ -332,18 +340,21 @@ export async function requestBorrow(request: BorrowRequest & { message?: string 
   assertNotBlocked(borrowerId, listing.ownerId);
   validateRequest(rentalsStore.get(), listing, borrowerId, request, toDateString(new Date()));
 
+  const offeredPricePerDay = request.offeredPricePerDay ?? listing.pricePerDay;
   const rental = await callRentalFunction('request_rental', {
     target_listing_id: listing.id,
     start_on: request.startDate,
     end_on: request.endDate,
     spot: request.pickupSpot,
+    offer_per_day: offeredPricePerDay,
   });
 
   const conversation = await getOrCreateConversation(listing.id);
   const note = request.message?.trim();
+  const offerLabel = `$${offeredPricePerDay % 1 === 0 ? offeredPricePerDay : offeredPricePerDay.toFixed(2)}/day`;
   await sendMessage(
     conversation.id,
-    `Requested to borrow ${formatRange(rental.startDate, rental.endDate)}, pickup at ${rental.pickupSpot}.` +
+    `Requested to borrow ${formatRange(rental.startDate, rental.endDate)}, pickup at ${rental.pickupSpot}, offering ${offerLabel}.` +
       (note ? `\n\n${note}` : '')
   );
   return rental;
@@ -386,6 +397,38 @@ export async function reportConditionIssue(id: string, description: string) {
 export async function reportMissedPickup(id: string) {
   reportNoShow(findOrThrow(id), getCurrentUserId(), new Date());
   return callRentalFunction('report_no_show', { target_id: id });
+}
+
+/** Other people's open requests that overlap these dates. Their prices stay hidden. */
+export function openOfferCount(
+  rentals: Rental[],
+  listingId: string,
+  startDate: string,
+  endDate: string,
+  borrowerId: string
+) {
+  return rentals.filter(
+    (rental) =>
+      rental.listingId === listingId &&
+      rental.borrowerId !== borrowerId &&
+      rental.status === 'requested' &&
+      rangesOverlap(rental.startDate, rental.endDate, startDate, endDate)
+  ).length;
+}
+
+/** Every day held by an accepted or active borrow of this listing, for the availability calendar. */
+export function bookedDays(rentals: Rental[], listingId: string) {
+  const days = new Set<string>();
+  for (const rental of rentals) {
+    if (rental.listingId !== listingId || !BOOKED.includes(rental.status)) continue;
+    const day = new Date(`${rental.startDate}T00:00:00`);
+    const end = new Date(`${rental.endDate}T00:00:00`);
+    while (day <= end) {
+      days.add(toDateString(day));
+      day.setDate(day.getDate() + 1);
+    }
+  }
+  return days;
 }
 
 /** Booked date ranges for a listing, for showing availability. */

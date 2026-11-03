@@ -25,6 +25,7 @@ export default function EditListingScreen() {
   return (
     <ListingForm
       initial={{ imageUris, title, description, category, events, size, pricePerDay }}
+      excludeId={listing.id}
       submitLabel="Save changes"
       onSubmit={async (values) => {
         await updateListing(listing.id, values);

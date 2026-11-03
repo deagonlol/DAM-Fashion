@@ -17,6 +17,8 @@ export type ConversationSummary = {
   otherUserAvatarUrl: string | undefined;
   listing: Listing | undefined;
   lastMessage: Message | undefined;
+  /** Lending when the signed-in user owns the listing. Missing listings count as borrowing. */
+  role: 'lender' | 'borrower';
 };
 
 function useAllMessages() {
@@ -38,12 +40,15 @@ export function useConversationSummaries(): ConversationSummary[] {
         const otherId = conversation.participantIds.find((id) => id !== currentUser.id);
         const thread = messages.filter((message) => message.conversationId === conversation.id);
         const otherUser = users.find((user) => user.id === otherId);
+        const listing = listings.find((item) => item.id === conversation.listingId);
+        const role: ConversationSummary['role'] = listing?.ownerId === currentUser.id ? 'lender' : 'borrower';
         return {
           conversation,
           otherUserName: otherUser?.name ?? 'Unknown',
           otherUserAvatarUrl: otherUser?.avatarUrl,
-          listing: listings.find((listing) => listing.id === conversation.listingId),
+          listing,
           lastMessage: thread.at(-1),
+          role,
         };
       });
     const activity = (summary: ConversationSummary) =>

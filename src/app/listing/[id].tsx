@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Avatar } from '@/components/avatar';
 import { TopBadge } from '@/components/badge-row';
 import { Button } from '@/components/button';
@@ -14,12 +15,14 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
 import { useRentals } from '@/hooks/use-rentals';
+import { useSales } from '@/hooks/use-sales';
 import { useListingReviews } from '@/hooks/use-reviews';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser, useUserStats } from '@/hooks/use-users';
 import { getOrCreateConversation } from '@/lib/data/messages';
-import { formatDateRange, formatPricePerDay } from '@/lib/format';
+import { bookedDays } from '@/lib/data/rentals';
+import { formatPrice, formatPricePerDay } from '@/lib/format';
 
 const REVIEWS_SHOWN = 3;
 
@@ -30,6 +33,7 @@ export default function ListingDetailScreen() {
   const ownerStats = useUserStats(listing?.ownerId ?? '');
   const currentUser = useCurrentUser();
   const rentals = useRentals();
+  const sales = useSales();
   const reviews = useListingReviews(id);
   const theme = useTheme();
   const [error, setError] = useState<string | null>(null);
@@ -49,13 +53,15 @@ export default function ListingDetailScreen() {
     () => rentals.filter((rental) => rental.listingId === id && rental.status === 'requested'),
     [rentals, id]
   );
-  const upcoming = useMemo(
-    () =>
-      rentals
-        .filter((rental) => rental.listingId === id && (rental.status === 'accepted' || rental.status === 'picked_up'))
-        .sort((a, b) => a.startDate.localeCompare(b.startDate)),
-    [rentals, id]
+  const myOpenBuy = useMemo(
+    () => sales.find((sale) => sale.listingId === id && sale.buyerId === currentUser.id && sale.status === 'requested'),
+    [sales, id, currentUser.id]
   );
+  const incomingBuys = useMemo(
+    () => sales.filter((sale) => sale.listingId === id && sale.status === 'requested'),
+    [sales, id]
+  );
+  const bookedDates = useMemo(() => bookedDays(rentals, id), [rentals, id]);
 
   if (!listing) {
     return (
@@ -91,6 +97,14 @@ export default function ListingDetailScreen() {
             <SaveButton listingId={listing.id} variant="inline" />
           </View>
           <ThemedText type="smallBold">{formatPricePerDay(listing.pricePerDay)}</ThemedText>
+          {listing.salePrice != null ? (
+            <ThemedText type="smallBold">Buy for {formatPrice(listing.salePrice)}</ThemedText>
+          ) : null}
+          {listing.soldAt ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Sold
+            </ThemedText>
+          ) : null}
           <ThemedText type="small" themeColor="textSecondary">
             {listing.category} · Size {listing.size}
           </ThemedText>
@@ -101,10 +115,11 @@ export default function ListingDetailScreen() {
           ) : null}
           {listing.description ? <ThemedText>{listing.description}</ThemedText> : null}
 
-          {upcoming.length > 0 ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              Booked: {upcoming.map((rental) => formatDateRange(rental.startDate, rental.endDate)).join(', ')}
-            </ThemedText>
+          {!listing.soldAt ? (
+            <View style={styles.availability}>
+              <ThemedText type="smallBold">Availability</ThemedText>
+              <AvailabilityCalendar bookedDates={bookedDates} blockedDates={new Set(listing.blockedDates ?? [])} />
+            </View>
           ) : null}
 
           <Pressable
@@ -183,7 +198,18 @@ export default function ListingDetailScreen() {
                 onPress={() => router.push(`/rental/${incomingRequests[0].id}`)}
               />
             ) : null}
+            {incomingBuys.length > 0 ? (
+              <Button
+                title={`${incomingBuys.length} buy request${incomingBuys.length === 1 ? '' : 's'}`}
+                style={styles.flex}
+                onPress={() => router.push(`/sale/${incomingBuys[0].id}`)}
+              />
+            ) : null}
           </>
+        ) : listing.soldAt && !myOpenBorrow ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.ownNote}>
+            This item has been sold.
+          </ThemedText>
         ) : listing.paused && !myOpenBorrow ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.ownNote}>
             Not available to borrow right now.
@@ -196,6 +222,13 @@ export default function ListingDetailScreen() {
             ) : (
               <Button title="Request to borrow" style={styles.flex} onPress={() => router.push(`/request/${listing.id}`)} />
             )}
+            {listing.salePrice != null && !listing.soldAt ? (
+              myOpenBuy ? (
+                <Button title="View your buy request" style={styles.flex} onPress={() => router.push(`/sale/${myOpenBuy.id}`)} />
+              ) : (
+                <Button title="Request to buy" style={styles.flex} onPress={() => router.push(`/buy/${listing.id}`)} />
+              )
+            ) : null}
           </>
         )}
       </SafeAreaView>
@@ -233,6 +266,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
   },
+  availability: {
+    marginTop: Spacing.three,
+    gap: Spacing.two,
+  },
   reportLink: {
     marginTop: Spacing.three,
     alignSelf: 'flex-start',
@@ -254,6 +291,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.three,
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,

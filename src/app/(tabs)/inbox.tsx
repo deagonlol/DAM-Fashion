@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
@@ -15,6 +15,10 @@ import { formatMessageTime } from '@/lib/format';
 
 export default function InboxScreen() {
   const summaries = useConversationSummaries();
+  const sections = [
+    { title: 'Lending', data: summaries.filter((summary) => summary.role === 'lender') },
+    { title: 'Borrowing', data: summaries.filter((summary) => summary.role === 'borrower') },
+  ].filter((section) => section.data.length > 0);
 
   return (
     <ThemedView style={styles.container}>
@@ -25,16 +29,22 @@ export default function InboxScreen() {
           </ThemedText>
           <ProfileButton />
         </View>
-        <FlatList
-          data={summaries}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.conversation.id}
           renderItem={({ item }) => <ConversationRow summary={item} />}
+          renderSectionHeader={({ section }) => (
+            <ThemedText type="smallBold" style={styles.section}>
+              {section.title}
+            </ThemedText>
+          )}
           ListEmptyComponent={
             <ThemedText themeColor="textSecondary" style={styles.empty}>
               No messages yet. Message an owner from any listing.
             </ThemedText>
           }
           contentInsetAdjustmentBehavior="automatic"
+          stickySectionHeadersEnabled={false}
         />
       </SafeAreaView>
     </ThemedView>
@@ -100,6 +110,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.two,
+  },
+  section: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.one,
   },
   empty: {
     textAlign: 'center',

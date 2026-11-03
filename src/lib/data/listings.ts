@@ -5,10 +5,12 @@
 import { supabase } from '../supabase';
 import { assertCanTransact } from './moderation';
 import { uploadPhotos } from './photos';
+import { declineSalesForListing } from './sales-store';
 import { rentalsStore } from './rentals-store';
 import { toListing, unwrap, type ListingRow } from './rows';
 import { getCurrentUserId } from './session';
 import { createStore } from './store';
+import { forYouScore, type Taste } from './search';
 import type { Listing, ListingFilters, ListingSort, NewListing, Rental } from './types';
 
 const listingsStore = createStore<Listing[]>([]);
@@ -24,22 +26,27 @@ export function setListings(listings: Listing[]) {
 
 export const EMPTY_FILTERS: ListingFilters = {
   query: '',
+  words: [],
+  interpreted: false,
   categories: [],
   events: [],
   sizes: [],
   maxPrice: null,
 };
 
+/** Words a sentence was parsed into, or the raw query when the user typed a plain search. */
+function searchTerms(filters: ListingFilters) {
+  if (filters.interpreted) return filters.words;
+  const query = filters.query.trim();
+  return query ? [query] : [];
+}
+
 /** Client-side filter. With Supabase this becomes query conditions (ilike, in, overlaps, lte). */
 export function matchesFilters(listing: Listing, filters: ListingFilters) {
-  const query = filters.query.trim().toLowerCase();
-  if (
-    query &&
-    ![listing.title, listing.description, listing.category, ...listing.events].some((text) =>
-      text.toLowerCase().includes(query)
-    )
-  ) {
-    return false;
+  const haystack = [listing.title, listing.description, listing.category, ...listing.events];
+  for (const term of searchTerms(filters)) {
+    const q = term.toLowerCase();
+    if (!haystack.some((text) => text.toLowerCase().includes(q))) return false;
   }
   if (filters.categories.length > 0 && !filters.categories.includes(listing.category)) return false;
   if (filters.events.length > 0 && !listing.events.some((event) => filters.events.includes(event))) {
@@ -68,9 +75,21 @@ function relevanceScore(listing: Listing, query: string) {
 const newestFirst = (a: Listing, b: Listing) => b.createdAt.localeCompare(a.createdAt);
 
 /** Returns a sorted copy. Ties fall back to newest first. */
-export function sortListings(listings: Listing[], sort: ListingSort, query: string) {
+export function sortListings(
+  listings: Listing[],
+  sort: ListingSort,
+  query: string,
+  context?: { taste?: Taste; words?: string[] }
+) {
   const sorted = [...listings];
   switch (sort) {
+    case 'For you':
+      return sorted.sort(
+        (a, b) =>
+          forYouScore(b, context?.taste ?? { events: [], categories: [] }, context?.words ?? []) -
+            forYouScore(a, context?.taste ?? { events: [], categories: [] }, context?.words ?? []) ||
+          newestFirst(a, b)
+      );
     case 'Most relevant':
       return sorted.sort(
         (a, b) => relevanceScore(b, query) - relevanceScore(a, query) || newestFirst(a, b)
@@ -113,6 +132,7 @@ async function listingColumns(ownerId: string, input: NewListing) {
     events: input.events,
     size: input.size,
     price_per_day: input.pricePerDay,
+    sale_price: input.salePrice ?? null,
     image_uris: await uploadPhotos('listing-photos', ownerId, input.imageUris),
   };
 }
@@ -197,4 +217,13 @@ export async function deleteListing(id: string) {
       .map((rental) => (rental.listingId === id && rental.status === 'requested' ? { ...rental, status: 'declined' } : rental))
   );
   listingsStore.set(listingsStore.get().filter((candidate) => candidate.id !== id));
+  declineSalesForListing(id);
+}
+
+/** Re-reads one listing after a sale changes it, so sold shows up without a full reload. */
+export async function reloadListing(id: string) {
+  const row = unwrap(await supabase.from('listings').select().eq('id', id).single<ListingRow>(), ListingError);
+  const listing = toListing(row);
+  listingsStore.set(listingsStore.get().map((item) => (item.id === listing.id ? listing : item)));
+  return listing;
 }

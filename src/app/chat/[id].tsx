@@ -113,7 +113,26 @@ export default function ChatScreen() {
           data={newestFirst}
           inverted
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <MessageBubble message={item} isMine={item.senderId === currentUser.id} />}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              isMine={item.senderId === currentUser.id}
+              onReport={
+                isParticipant && item.senderId !== currentUser.id
+                  ? () =>
+                      router.push({
+                        pathname: '/report/[userId]',
+                        params: {
+                          userId: item.senderId,
+                          conversationId: item.conversationId,
+                          messageId: item.id,
+                          reason: 'Inappropriate messages',
+                        },
+                      })
+                  : undefined
+              }
+            />
+          )}
           contentContainerStyle={styles.messages}
           keyboardDismissMode="interactive"
           ListEmptyComponent={
@@ -180,11 +199,15 @@ export default function ChatScreen() {
   );
 }
 
-function MessageBubble({ message, isMine }: { message: Message; isMine: boolean }) {
+/** Long-press someone else's message to report it. */
+function MessageBubble({ message, isMine, onReport }: { message: Message; isMine: boolean; onReport?: () => void }) {
   const theme = useTheme();
 
   return (
-    <View
+    <Pressable
+      onLongPress={onReport}
+      disabled={!onReport}
+      accessibilityHint={onReport ? 'Long-press to report this message' : undefined}
       style={[
         styles.bubble,
         isMine
@@ -192,7 +215,7 @@ function MessageBubble({ message, isMine }: { message: Message; isMine: boolean 
           : [styles.theirs, { backgroundColor: theme.backgroundElement }],
       ]}>
       <ThemedText style={isMine && { color: theme.onAccent }}>{message.text}</ThemedText>
-    </View>
+    </Pressable>
   );
 }
 

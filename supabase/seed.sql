@@ -112,22 +112,30 @@ from (values
 ) as l(short_name, owner, title, description, category, events, size, price, photo, paused, age_days)
 on conflict (id) do nothing;
 
+-- Alex's cape can be bought as well as borrowed. Higher than the $6 daily rate.
+update public.listings
+set sale_price = 40
+where id = pg_temp.sid('l8');
+
 -- ---------------------------------------------------------------------------
 -- Borrows. start/end are days from today; picked/returned are days from now.
 -- ---------------------------------------------------------------------------
 insert into public.rentals (
   id, listing_id, borrower_id, lender_id, start_date, end_date, pickup_spot, status,
-  created_at, picked_up_at, returned_at, returned_late, no_show_reported_by
+  created_at, picked_up_at, returned_at, returned_late, no_show_reported_by, offered_price_per_day
 )
 select pg_temp.sid(r.short_name), pg_temp.sid(r.listing), pg_temp.sid(r.borrower), pg_temp.sid(r.lender),
-       current_date + r.start_day, current_date + r.end_day, r.spot, r.status,
+       -- Austin's date, not the database's (UTC), which is a day ahead in the evening.
+       public.austin_now()::date + r.start_day, public.austin_now()::date + r.end_day, r.spot, r.status,
        -- Requested a few days before pickup, but never in the future.
        now() + make_interval(days => least(r.start_day - 4, 0)) - interval '2 hours',
        case when r.picked_day is not null then now() + make_interval(days => r.picked_day) end,
        case when r.returned_day is not null then now() + make_interval(days => r.returned_day) end,
        case when r.status = 'returned' then false end,
-       case when r.no_show_by is not null then pg_temp.sid(r.no_show_by) end
-from (values
+       case when r.no_show_by is not null then pg_temp.sid(r.no_show_by) end,
+       l.price_per_day
+from public.listings l
+join (values
   -- Alex (u1): finished borrows, a recent one waiting on reviews, one overdue, one upcoming, requests both ways.
   ('r1', 'l1', 'u1', 'u2', -38, -37, 'Jester Center', 'returned', -38, -37, null),
   ('r2', 'l3', 'u1', 'u2', -26, -25, 'Texas Union', 'returned', -26, -25, null),
@@ -159,8 +167,21 @@ from (values
   ('r39', 'l1', 'u8', 'u2', 6, 6, 'Gregory Gym', 'declined', null, null, null),
   ('r40', 'l8', 'u6', 'u1', 9, 10, 'Jester Center', 'cancelled', null, null, null),
   ('r41', 'l17', 'u2', 'u8', -70, -69, 'West Campus (Guadalupe & 24th)', 'returned', -70, -69, null),
-  ('r42', 'l20', 'u3', 'u9', -45, -45, 'Texas Union', 'returned', -45, -45, null)
+  ('r42', 'l20', 'u3', 'u9', -45, -45, 'Texas Union', 'returned', -45, -45, null),
+  -- A second open offer on Alex's cape, so the lender sees a choice. Price is raised just below.
+  ('r43', 'l8', 'u6', 'u1', 3, 4, 'Texas Union', 'requested', null, null, null)
 ) as r(short_name, listing, borrower, lender, start_day, end_day, spot, status, picked_day, returned_day, no_show_by)
+where l.id = pg_temp.sid(r.listing)
+on conflict (id) do nothing;
+
+update public.rentals
+set offered_price_per_day = 9
+where id = pg_temp.sid('r43');
+
+-- Priya also wants to buy the cape, so Alex can accept a borrow or a sale.
+insert into public.sales (id, listing_id, buyer_id, seller_id, price, status, created_at)
+select pg_temp.sid('s1'), pg_temp.sid('l8'), pg_temp.sid('u6'), pg_temp.sid('u1'), 40, 'requested', now() - interval '1 hour'
+where exists (select 1 from public.listings where id = pg_temp.sid('l8'))
 on conflict (id) do nothing;
 
 -- Handoff codes for accepted and in-progress borrows.
