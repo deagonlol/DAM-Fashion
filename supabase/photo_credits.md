@@ -1,6 +1,6 @@
 # Demo photo credits
 
-The test listings use these photos from [Wikimedia Commons](https://commons.wikimedia.org). Each is under the license shown; Creative Commons BY and BY-SA licenses require this credit. Set by `supabase/demo_photos.sql`. Replace them with your own photos before launch.
+The test listings use these photos from [Wikimedia Commons](https://commons.wikimedia.org). Each is under the license shown; Creative Commons BY and BY-SA licenses require this credit. Set by `supabase/demo_photos.sql` and `supabase/demo_photos_2.sql`. Replace them with your own photos before launch.
 
 | Listing | Photo | Author | License |
 |---|---|---|---|
@@ -26,3 +26,9 @@ The test listings use these photos from [Wikimedia Commons](https://commons.wiki
 | l25 | [Angel Costume (Unsplash).jpg](https://commons.wikimedia.org/wiki/File:Angel_Costume_(Unsplash).jpg) | 小胖 车 sommi | CC0 |
 | l27 | [Amgueddfa Cymru - crys rygbi - rugby jersey - 95360.jpeg](https://commons.wikimedia.org/wiki/File:Amgueddfa_Cymru_-_crys_rygbi_-_rugby_jersey_-_95360.jpeg) | Unknown | CC BY-SA 4.0 |
 | l28 | [Epping Foresters Cricket Club Jersey cable knit cricket pullover.jpg](https://commons.wikimedia.org/wiki/File:Epping_Foresters_Cricket_Club_Jersey_cable_knit_cricket_pullover.jpg) | Acabashi | CC BY-SA 4.0 |
+| l8 | [Red cloak reproduction.jpg](https://commons.wikimedia.org/wiki/File:Red_cloak_reproduction.jpg) | Gibmetal77 | CC BY-SA 3.0 |
+| l14 | [Bib-brace.jpg](https://commons.wikimedia.org/wiki/File:Bib-brace.jpg) | User Stuz on en.wikipedia | CC BY-SA 3.0 |
+| l20 | [Camisade puño doble.jpg](https://commons.wikimedia.org/wiki/File:Camisade_pu%C3%B1o_doble.jpg) | Incal | CC BY-SA 3.0 |
+| l22 | [New Junon evening dress (51580).jpg](https://commons.wikimedia.org/wiki/File:New_Junon_evening_dress_(51580).jpg) | Rhododendrites | CC BY-SA 4.0 |
+| l26 | [Jorts, back view.jpg](https://commons.wikimedia.org/wiki/File:Jorts,_back_view.jpg) | Collabratude | CC BY 2.0 |
+| l29 | [Bow tie.jpg](https://commons.wikimedia.org/wiki/File:Bow_tie.jpg) | David Ring | CC0 |
