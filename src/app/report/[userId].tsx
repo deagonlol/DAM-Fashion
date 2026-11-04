@@ -28,7 +28,7 @@ type Params = {
   messageId?: string;
 };
 
-/** Report a user to the DAM Fashion team, with an option to block them too. */
+/** Report a user to the Lendr team, with an option to block them too. */
 export default function ReportScreen() {
   const { userId, reason: initialReason, conversationId, rentalId, listingId, messageId } =
     useLocalSearchParams<Params>();
@@ -117,7 +117,7 @@ export default function ReportScreen() {
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="automatic">
           <ThemedText>
-            What happened{where ? ` in ${where}` : ''}? Reports are private and reviewed by the DAM Fashion team.
+            What happened{where ? ` in ${where}` : ''}? Reports are private and reviewed by the Lendr team.
           </ThemedText>
 
           {reportedMessage ? (

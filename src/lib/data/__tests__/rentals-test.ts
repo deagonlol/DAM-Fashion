@@ -1,6 +1,7 @@
 import {
   accept,
   bookedDays,
+  isAvailableOn,
   openOfferCount,
   borrowCount,
   borrowedListings,
@@ -15,7 +16,9 @@ import {
   formatRemainingTime,
   isOverdue,
   lendCount,
-  outOnBorrow,
+  orderStatus,
+  pickRange,
+  ordersFor,
   rangesOverlap,
   rentalDays,
   RentalError,
@@ -252,24 +255,39 @@ describe('formatRemainingTime', () => {
   });
 });
 
-describe('outOnBorrow', () => {
-  it('splits picked_up rentals into rented vs lent for the user', () => {
-    const borrowed = rental({ status: 'picked_up', borrowerId: 'me', lenderId: 'lender' });
+describe('orders', () => {
+  it('splits one side into active (soonest first) and past (newest first)', () => {
+    const later = rental({ status: 'accepted', startDate: '2026-10-25', endDate: '2026-10-26' });
+    const out = rental({ status: 'picked_up', startDate: '2026-10-20', endDate: '2026-10-21' });
+    const waiting = rental({ status: 'requested', startDate: '2026-10-28', endDate: '2026-10-28' });
+    const oldReturn = rental({ status: 'returned', startDate: '2026-09-01', endDate: '2026-09-02' });
+    const newReturn = rental({ status: 'returned', startDate: '2026-10-01', endDate: '2026-10-02' });
+    const missed = rental({ status: 'no_show', startDate: '2026-09-10', endDate: '2026-09-10' });
+    const declined = rental({ status: 'declined' });
     const lentOut = rental({ status: 'picked_up', borrowerId: 'other', lenderId: 'me' });
-    const result = outOnBorrow([borrowed, lentOut], 'me');
-    expect(result.rented).toEqual([borrowed]);
-    expect(result.lent).toEqual([lentOut]);
+    const result = ordersFor([later, out, waiting, oldReturn, newReturn, missed, declined, lentOut], 'me', 'borrower');
+    expect(result.active).toEqual([out, later, waiting]);
+    expect(result.past).toEqual([newReturn, missed, oldReturn]);
+    expect(ordersFor([lentOut, out], 'me', 'lender')).toEqual({ active: [lentOut], past: [] });
   });
 
-  it('ignores every status except picked_up', () => {
-    const statuses: RentalStatus[] = ['requested', 'accepted', 'declined', 'cancelled', 'returned', 'no_show'];
-    const rentals = statuses.map((status) => rental({ status, borrowerId: 'me', lenderId: 'lender' }));
-    expect(outOnBorrow(rentals, 'me')).toEqual({ rented: [], lent: [] });
-  });
-
-  it('omits items the user is not part of', () => {
-    const other = rental({ status: 'picked_up', borrowerId: 'a', lenderId: 'b' });
-    expect(outOnBorrow([other], 'me')).toEqual({ rented: [], lent: [] });
+  it('describes where each borrow stands', () => {
+    const now = local('2026-10-20T10:00:00');
+    expect(orderStatus(rental({ status: 'requested', startDate: '2026-10-21' }), now)).toMatchObject({
+      label: 'Waiting for lender',
+      text: 'Pickup tomorrow',
+    });
+    expect(orderStatus(rental({ status: 'requested' }), now, 'lender').label).toBe('Needs your answer');
+    expect(orderStatus(rental({ status: 'accepted', startDate: '2026-10-20' }), now).text).toBe('Today at Texas Union');
+    expect(orderStatus(rental({ status: 'picked_up', endDate: '2026-10-21' }), now)).toMatchObject({
+      label: 'Return countdown',
+      text: 'Return by tomorrow',
+      tone: 'accent',
+    });
+    expect(orderStatus(rental({ status: 'picked_up', endDate: '2026-10-17' }), now)).toMatchObject({
+      label: 'Overdue',
+      tone: 'danger',
+    });
   });
 });
 
@@ -399,6 +417,12 @@ describe('availability set by the owner', () => {
     );
   });
 
+  it("only allows the lender's pickup spots, when they picked some", () => {
+    const picky = { ...listings[0], pickupSpots: ['Jester Center' as const] };
+    expect(() => validateRequest([], picky, 'me', request, today)).toThrow("lender's pickup spots");
+    expect(() => validateRequest([], picky, 'me', { ...request, pickupSpot: 'Jester Center' }, today)).not.toThrow();
+  });
+
   it('blocks requests touching a day the owner blocked off', () => {
     expect(() => validateRequest([], { ...listings[0], blockedDates: ['2026-10-22'] }, 'me', request, today)).toThrow(
       "isn't lending it"
@@ -427,5 +451,41 @@ describe('booked days', () => {
       rental({ status: 'accepted', listingId: 'b', startDate: '2026-11-12', endDate: '2026-11-12' }),
     ];
     expect([...bookedDays(rentals, 'a')]).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-05']);
+  });
+});
+
+describe('picking borrow dates on the calendar', () => {
+  const free = () => true;
+  const booked22 = (start: string, end: string) => !rangesOverlap(start, end, '2026-10-22', '2026-10-22');
+
+  it('picks a pickup day, then extends to a later return day', () => {
+    const first = pickRange(null, '2026-10-20', free);
+    expect(first).toEqual({ startDate: '2026-10-20', endDate: '2026-10-20' });
+    expect(pickRange(first, '2026-10-23', free)).toEqual({ startDate: '2026-10-20', endDate: '2026-10-23' });
+  });
+
+  it('starts over on an earlier day, a third tap, or a range that is too long', () => {
+    const range = { startDate: '2026-10-20', endDate: '2026-10-23' };
+    expect(pickRange(range, '2026-10-25', free)).toEqual({ startDate: '2026-10-25', endDate: '2026-10-25' });
+    const single = { startDate: '2026-10-20', endDate: '2026-10-20' };
+    expect(pickRange(single, '2026-10-18', free)).toEqual({ startDate: '2026-10-18', endDate: '2026-10-18' });
+    expect(pickRange(single, '2026-11-10', free)).toEqual({ startDate: '2026-11-10', endDate: '2026-11-10' });
+  });
+
+  it('ignores unavailable days and never spans one', () => {
+    const single = { startDate: '2026-10-20', endDate: '2026-10-20' };
+    expect(pickRange(single, '2026-10-22', booked22)).toBe(single);
+    expect(pickRange(single, '2026-10-24', booked22)).toEqual({ startDate: '2026-10-24', endDate: '2026-10-24' });
+  });
+});
+
+describe('available on a day', () => {
+  const item = listings[0];
+  it('is free unless an accepted or active borrow covers the day, or the owner blocked it', () => {
+    const out = rental({ status: 'picked_up', startDate: '2026-10-20', endDate: '2026-10-22' });
+    const waiting = rental({ status: 'requested', startDate: '2026-10-25', endDate: '2026-10-25' });
+    expect(isAvailableOn([out, waiting], item, '2026-10-21')).toBe(false);
+    expect(isAvailableOn([out, waiting], item, '2026-10-25')).toBe(true);
+    expect(isAvailableOn([], { ...item, blockedDates: ['2026-10-26'] }, '2026-10-26')).toBe(false);
   });
 });

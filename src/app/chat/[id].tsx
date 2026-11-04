@@ -17,7 +17,7 @@ import { useUser } from '@/hooks/use-users';
 import { sendMessage } from '@/lib/data/messages';
 import { unblockUser } from '@/lib/data/moderation';
 import type { Message } from '@/lib/data/types';
-import { formatPricePerDay } from '@/lib/format';
+import { formatMessageTime, formatPricePerDay } from '@/lib/format';
 
 export default function ChatScreen() {
   const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
@@ -92,20 +92,32 @@ export default function ChatScreen() {
           <Pressable
             onPress={() => router.push(`/listing/${listing.id}`)}
             accessibilityRole="link"
-            style={[styles.listingBanner, { borderColor: theme.border }]}>
+            style={({ pressed }) => [
+              styles.listingBanner,
+              { backgroundColor: theme.backgroundElement },
+              pressed && styles.dimmed,
+            ]}>
             <Image
               source={listing.imageUris[0]}
-              style={[styles.listingThumb, { backgroundColor: theme.backgroundElement }]}
+              style={[styles.listingThumb, { backgroundColor: theme.background }]}
               contentFit="cover"
             />
             <View style={styles.flex}>
-              <ThemedText type="smallBold" numberOfLines={1}>
+              <ThemedText type="smallBold" numberOfLines={1} style={styles.listingTitle}>
                 {listing.title}
               </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {formatPricePerDay(listing.pricePerDay)} · Size {listing.size}
+              <ThemedText type="small" themeColor="accent">
+                {formatPricePerDay(listing.pricePerDay)}
+                <ThemedText type="small" themeColor="textSecondary">
+                  {' '}
+                  · Size {listing.size}
+                  {listing.brand ? ` · ${listing.brand}` : ''}
+                </ThemedText>
               </ThemedText>
             </View>
+            <ThemedText type="small" themeColor="accent">
+              View ›
+            </ThemedText>
           </Pressable>
         ) : null}
 
@@ -146,7 +158,7 @@ export default function ChatScreen() {
         {!isParticipant ? (
           <SafeAreaView edges={['bottom']} style={[styles.notice, { borderColor: theme.border }]}>
             <ThemedText type="small" themeColor="textSecondary">
-              Viewing as the DAM Fashion team. Read-only.
+              Viewing as the Lendr team. Read-only.
             </ThemedText>
           </SafeAreaView>
         ) : blockedEitherWay ? (
@@ -176,10 +188,7 @@ export default function ChatScreen() {
                 placeholder="Write a message…"
                 placeholderTextColor={theme.textSecondary}
                 multiline
-                style={[
-                  styles.input,
-                  { backgroundColor: theme.backgroundElement, color: theme.text, borderColor: theme.border },
-                ]}
+                style={[styles.input, { backgroundColor: theme.backgroundElement, color: theme.text }]}
               />
               <Pressable
                 onPress={handleSend}
@@ -187,9 +196,7 @@ export default function ChatScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Send"
                 style={[styles.send, { backgroundColor: theme.accent }, !canSend && styles.dimmed]}>
-                <ThemedText type="smallBold" style={{ color: theme.onAccent }}>
-                  Send
-                </ThemedText>
+                <ThemedText style={[styles.sendArrow, { color: theme.onAccent }]}>↑</ThemedText>
               </Pressable>
             </View>
           </SafeAreaView>
@@ -204,18 +211,23 @@ function MessageBubble({ message, isMine, onReport }: { message: Message; isMine
   const theme = useTheme();
 
   return (
-    <Pressable
-      onLongPress={onReport}
-      disabled={!onReport}
-      accessibilityHint={onReport ? 'Long-press to report this message' : undefined}
-      style={[
-        styles.bubble,
-        isMine
-          ? [styles.mine, { backgroundColor: theme.accent }]
-          : [styles.theirs, { backgroundColor: theme.backgroundElement }],
-      ]}>
-      <ThemedText style={isMine && { color: theme.onAccent }}>{message.text}</ThemedText>
-    </Pressable>
+    <View style={[styles.messageRow, isMine ? styles.mine : styles.theirs]}>
+      <Pressable
+        onLongPress={onReport}
+        disabled={!onReport}
+        accessibilityHint={onReport ? 'Long-press to report this message' : undefined}
+        style={[
+          styles.bubble,
+          isMine
+            ? [styles.mineBubble, { backgroundColor: theme.accent }]
+            : [styles.theirsBubble, { backgroundColor: theme.backgroundElement }],
+        ]}>
+        <ThemedText style={isMine && { color: theme.onAccent }}>{message.text}</ThemedText>
+      </Pressable>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.time}>
+        {formatMessageTime(message.createdAt)}
+      </ThemedText>
+    </View>
   );
 }
 
@@ -235,13 +247,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    padding: Spacing.three,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    margin: Spacing.three,
+    marginBottom: 0,
+    padding: Spacing.two,
+    borderRadius: 12,
   },
   listingThumb: {
-    width: 40,
-    height: 52,
-    borderRadius: 6,
+    width: 44,
+    height: 56,
+    borderRadius: 8,
+  },
+  listingTitle: {
+    fontFamily: Fonts.heading,
   },
   messages: {
     padding: Spacing.three,
@@ -251,17 +268,34 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     transform: [{ scaleY: -1 }],
   },
-  bubble: {
+  messageRow: {
     maxWidth: '80%',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: 16,
+    gap: Spacing.half,
   },
   mine: {
     alignSelf: 'flex-end',
+    alignItems: 'flex-end',
   },
   theirs: {
     alignSelf: 'flex-start',
+    alignItems: 'flex-start',
+  },
+  bubble: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: 20,
+  },
+  // A squared-off corner on the speaker's side, like a speech bubble's tail.
+  mineBubble: {
+    borderBottomRightRadius: 6,
+  },
+  theirsBubble: {
+    borderBottomLeftRadius: 6,
+  },
+  time: {
+    fontSize: 11,
+    lineHeight: 14,
+    paddingHorizontal: Spacing.one,
   },
   composerWrap: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -287,8 +321,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     maxHeight: 120,
-    borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: 22,
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,
     paddingBottom: Spacing.two,
@@ -296,9 +329,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   send: {
-    borderRadius: 18,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + Spacing.one,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendArrow: {
+    fontFamily: Fonts.heading,
+    fontSize: 20,
+    lineHeight: 24,
   },
   dimmed: {
     opacity: 0.4,

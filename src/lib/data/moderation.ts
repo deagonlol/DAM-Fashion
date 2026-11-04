@@ -251,7 +251,7 @@ export async function submitReport(input: ReportInput, photoUris: string[] = [])
 /** Team only: uphold (adds a strike) or dismiss a report. */
 export async function decideReport(reportId: string, decision: 'upheld' | 'dismissed'): Promise<Report> {
   if (getUserSnapshot(getCurrentUserId())?.role !== 'admin') {
-    throw new ModerationError('Only the DAM Fashion team can review reports.');
+    throw new ModerationError('Only the Lendr team can review reports.');
   }
   const report = reportsStore.get().find((candidate) => candidate.id === reportId);
   if (!report) throw new ModerationError('Report not found.');

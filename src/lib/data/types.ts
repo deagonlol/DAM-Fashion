@@ -35,7 +35,7 @@ export type User = {
   avatarUrl?: string;
   bio?: string;
   joinedAt: string;
-  /** DAM Fashion team members can review reports. */
+  /** Lendr team members can review reports. */
   role?: 'admin';
 };
 
@@ -49,6 +49,10 @@ export type Listing = {
   category: Category;
   events: EventTag[];
   size: Size;
+  /** Optional, e.g. "Levi's". Empty when the owner didn't say. */
+  brand?: string;
+  /** Where the lender will meet. Empty means any of the usual pickup spots. */
+  pickupSpots?: PickupSpot[];
   pricePerDay: number;
   /** One-time buy price. Only set when the owner is willing to sell, and always above the daily rate. */
   salePrice?: number;

@@ -38,6 +38,9 @@ export type ListingRow = {
   category: string;
   events: string[];
   size: string;
+  /** Missing until the brand and pickup spots migration has run. */
+  brand?: string;
+  pickup_spots?: string[];
   price_per_day: number | string;
   sale_price?: number | string | null;
   sold_at?: string | null;
@@ -167,6 +170,8 @@ export function toListing(row: ListingRow): Listing {
     category: row.category as Category,
     events: row.events as EventTag[],
     size: row.size as Size,
+    brand: row.brand || undefined,
+    pickupSpots: (row.pickup_spots ?? []) as PickupSpot[],
     pricePerDay: Number(row.price_per_day),
     salePrice: row.sale_price == null ? undefined : Number(row.sale_price),
     soldAt: optional(row.sold_at ?? null),

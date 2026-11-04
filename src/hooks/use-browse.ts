@@ -1,11 +1,13 @@
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 
 import { useFilteredListings } from '@/hooks/use-listings';
 import { useBlocks, useRestrictedUserIds } from '@/hooks/use-moderation';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useUserSearch } from '@/hooks/use-users';
+import { EMPTY_FILTERS, trendingListings } from '@/lib/data/listings';
 import { isBlockedBetween } from '@/lib/data/moderation';
-import type { ListingFilters, ListingSort } from '@/lib/data/types';
+import { getSaveCountsSnapshot, subscribeToSaveCounts } from '@/lib/data/saves';
+import type { Category, ListingFilters, ListingSort } from '@/lib/data/types';
 
 /**
  * Listings to show when browsing: filtered and sorted, minus paused or sold listings, listings from
@@ -26,6 +28,21 @@ export function useBrowseListings(filters: ListingFilters, sort: ListingSort) {
           !isBlockedBetween(blocks, viewer.id, listing.ownerId)
       ),
     [results, viewer.id, blocks, restricted]
+  );
+}
+
+/** Most-saved listings anyone can borrow right now, for Home's "Trending now" row, optionally of one type. */
+export function useTrendingListings(limit: number, category: Category | null = null) {
+  const listings = useBrowseListings(EMPTY_FILTERS, 'Newest');
+  const counts = useSyncExternalStore(subscribeToSaveCounts, getSaveCountsSnapshot);
+  return useMemo(
+    () =>
+      trendingListings(
+        category ? listings.filter((listing) => listing.category === category) : listings,
+        counts,
+        limit
+      ),
+    [listings, counts, limit, category]
   );
 }
 

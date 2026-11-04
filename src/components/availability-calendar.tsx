@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { toDateString } from '@/lib/data/rentals';
+import { toDateString, type DateRange } from '@/lib/data/rentals';
 
 type AvailabilityCalendarProps = {
   /** Days held by accepted or active borrows. */
@@ -13,13 +13,26 @@ type AvailabilityCalendarProps = {
   blockedDates: Set<string>;
   /** When set, tapping a free or blocked future day toggles it. */
   onToggleDay?: (date: string) => void;
+  /** Picking borrow dates: the chosen range, and what to do when a free day is tapped. */
+  selected?: DateRange | null;
+  onSelectDay?: (date: string) => void;
 };
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS_AHEAD = 3;
 
-/** Month grid showing booked, blocked, and free days. Owners can tap to block days off. */
-export function AvailabilityCalendar({ bookedDates, blockedDates, onToggleDay }: AvailabilityCalendarProps) {
+/**
+ * Month grid showing booked, blocked, and free days. Owners can tap to block days off; borrowers
+ * can tap free days to pick their dates.
+ */
+export function AvailabilityCalendar({
+  bookedDates,
+  blockedDates,
+  onToggleDay,
+  selected,
+  onSelectDay,
+}: AvailabilityCalendarProps) {
+  const picking = Boolean(onSelectDay);
   const theme = useTheme();
   const [today] = useState(() => toDateString(new Date()));
   const [monthOffset, setMonthOffset] = useState(0);
@@ -76,28 +89,42 @@ export function AvailabilityCalendar({ bookedDates, blockedDates, onToggleDay }:
           const past = date < today;
           const booked = bookedDates.has(date);
           const blocked = blockedDates.has(date);
-          const canToggle = Boolean(onToggleDay) && !past && !booked;
-          const state = booked ? 'booked' : blocked ? 'unavailable' : past ? 'past' : 'free';
+          const inRange = Boolean(selected && date >= selected.startDate && date <= selected.endDate);
+          // While picking, booked days look like any other day you can't choose.
+          const showBooked = booked && !picking;
+          const unavailable = blocked || (booked && picking);
+          const canPress = picking ? !past && !booked && !blocked : Boolean(onToggleDay) && !past && !booked;
+          const state = inRange
+            ? 'selected'
+            : showBooked
+              ? 'booked'
+              : unavailable
+                ? 'unavailable'
+                : past
+                  ? 'past'
+                  : 'free';
+          const onPress = picking ? onSelectDay : onToggleDay;
           return (
             <Pressable
               key={date}
-              onPress={canToggle ? () => onToggleDay?.(date) : undefined}
-              disabled={!canToggle}
-              accessibilityRole={canToggle ? 'button' : undefined}
+              onPress={canPress ? () => onPress?.(date) : undefined}
+              disabled={!canPress}
+              accessibilityRole={canPress ? 'button' : undefined}
+              accessibilityState={picking ? { selected: inRange } : undefined}
               accessibilityLabel={`${new Date(`${date}T00:00:00`).toLocaleDateString([], { month: 'long', day: 'numeric' })}, ${state}`}
               style={styles.cell}>
               <View
                 style={[
                   styles.day,
-                  booked && { backgroundColor: theme.accent },
-                  blocked && { backgroundColor: theme.backgroundSelected },
+                  (showBooked || inRange) && { backgroundColor: theme.accent },
+                  unavailable && { backgroundColor: theme.backgroundSelected },
                   date === today && { borderWidth: 1, borderColor: theme.text },
                 ]}>
                 <ThemedText
                   type="small"
                   style={[
-                    booked && { color: theme.onAccent },
-                    blocked && styles.struck,
+                    (showBooked || inRange) && { color: theme.onAccent },
+                    unavailable && styles.struck,
                     past && styles.past,
                   ]}>
                   {Number(date.slice(8))}
@@ -109,7 +136,7 @@ export function AvailabilityCalendar({ bookedDates, blockedDates, onToggleDay }:
       </View>
 
       <View style={styles.legend}>
-        <Legend color={theme.accent} label="Booked" />
+        <Legend color={theme.accent} label={picking ? 'Your dates' : 'Booked'} />
         <Legend color={theme.backgroundSelected} label="Unavailable" />
         <Legend color={theme.background} border={theme.border} label="Free" />
       </View>

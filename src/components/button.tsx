@@ -6,7 +6,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   title: string;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'outline';
   style?: StyleProp<ViewStyle>;
 };
 
@@ -14,6 +14,7 @@ type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
 export function Button({ title, disabled, variant = 'primary', style, ...rest }: ButtonProps) {
   const theme = useTheme();
   const primary = variant === 'primary';
+  const outline = variant === 'outline';
 
   return (
     <Pressable
@@ -24,12 +25,14 @@ export function Button({ title, disabled, variant = 'primary', style, ...rest }:
         styles.button,
         primary
           ? { backgroundColor: theme.accent }
-          : { backgroundColor: theme.backgroundElement },
+          : outline
+            ? [styles.outline, { borderColor: theme.accent }]
+            : { backgroundColor: theme.backgroundElement },
         (pressed || disabled) && styles.dimmed,
         style,
       ]}
       {...rest}>
-      <ThemedText style={[styles.label, { color: primary ? theme.onAccent : theme.text }]}>
+      <ThemedText style={[styles.label, { color: primary ? theme.onAccent : outline ? theme.accent : theme.text }]}>
         {title}
       </ThemedText>
     </Pressable>
@@ -42,6 +45,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     borderRadius: 999,
     alignItems: 'center',
+  },
+  outline: {
+    borderWidth: 1.5,
   },
   dimmed: {
     opacity: 0.4,

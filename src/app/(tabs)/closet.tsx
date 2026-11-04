@@ -1,18 +1,26 @@
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ListingGrid } from '@/components/listing-grid';
 import { ProfileButton } from '@/components/profile-button';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useSavedListings } from '@/hooks/use-saves';
 import { useCurrentUser } from '@/hooks/use-session';
+import { listingMentions } from '@/lib/data/listings';
 
 /** Saved listings — the closet of pieces you want to borrow. */
 export default function ClosetScreen() {
   const user = useCurrentUser();
   const saved = useSavedListings(user.id);
+  const [query, setQuery] = useState('');
+  const shown = useMemo(
+    () => (query.trim() ? saved.filter((listing) => listingMentions(listing, query)) : saved),
+    [saved, query]
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -23,7 +31,23 @@ export default function ClosetScreen() {
           </ThemedText>
           <ProfileButton />
         </View>
-        <ListingGrid listings={saved} emptyText="Tap the ♡ on any item to save it here." />
+        {saved.length > 0 ? (
+          <View style={styles.search}>
+            <TextField
+              variant="search"
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search your closet…"
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+              autoCorrect={false}
+            />
+          </View>
+        ) : null}
+        <ListingGrid
+          listings={shown}
+          emptyText={query.trim() ? 'Nothing in your closet matches.' : 'Tap the ♡ on any item to save it here.'}
+        />
       </SafeAreaView>
     </ThemedView>
   );
@@ -40,5 +64,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
     paddingBottom: Spacing.two,
+  },
+  search: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.three,
   },
 });

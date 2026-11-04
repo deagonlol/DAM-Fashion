@@ -1,278 +1,172 @@
-import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { router } from 'expo-router';
+import { useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ChipGroup, MultiChipGroup } from '@/components/chip-group';
-import { FilterPanel, FilterToggle } from '@/components/filter-dropdown';
-import { ListingGrid } from '@/components/listing-grid';
+import { Chip } from '@/components/chip-group';
+import { ListingCard } from '@/components/listing-card';
 import { ProfileButton } from '@/components/profile-button';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { UserRow } from '@/components/user-row';
-import { Spacing } from '@/constants/theme';
-import { useBrowseListings, useBrowsePeople } from '@/hooks/use-browse';
+import { Fonts, Spacing } from '@/constants/theme';
+import { useBrowseListings, useTrendingListings } from '@/hooks/use-browse';
+import { useTheme } from '@/hooks/use-theme';
 import { EMPTY_FILTERS } from '@/lib/data/listings';
-import { describeIntent, parseSearchQuery, type SearchIntent } from '@/lib/data/search';
-import {
-  CATEGORIES,
-  EVENTS,
-  SIZES,
-  SORT_OPTIONS,
-  type ListingFilters,
-  type ListingSort,
-} from '@/lib/data/types';
-import { describePhoto } from '@/lib/data/vision-search';
-import { formatPrice } from '@/lib/format';
+import { CATEGORIES, type Category, type EventTag, type Listing } from '@/lib/data/types';
 
-const MODES = ['Items', 'People'] as const;
-type Mode = (typeof MODES)[number];
+const ROW_LENGTH = 10;
 
-const PRICE_LIMITS = [5, 10, 20] as const;
-const PRICE_LABELS = PRICE_LIMITS.map((price) => `Up to $${price}/day`);
+/** Event tiles, in the order students reach for them. Each opens search filtered to that event. */
+const EVENT_TILES: { event: EventTag; label: string; icon: string }[] = [
+  { event: 'Game Day', label: 'Game Day', icon: '🏈' },
+  { event: 'Professional', label: 'Career Fair', icon: '💼' },
+  { event: 'Formal', label: 'Formal', icon: '🥂' },
+  { event: 'Semi-Formal', label: 'Semi-Formal', icon: '✨' },
+  { event: 'Themed Party', label: 'Themed Party', icon: '🎉' },
+  { event: 'Concert & Festival', label: 'Festival', icon: '🎶' },
+  { event: 'Western', label: 'Western', icon: '🤠' },
+  { event: 'Halloween', label: 'Halloween', icon: '🎃' },
+  { event: 'Graduation', label: 'Graduation', icon: '🎓' },
+];
 
-type Panel = 'type' | 'event' | 'size' | 'price' | 'sort';
-
-/** Home: the listing feed, with search, filters, and sort applied in place. */
+/** Home: search, browse by event, and what's trending or new. The full grid lives on Search. */
 export default function HomeScreen() {
-  const [mode, setMode] = useState<Mode>('Items');
-  const [filters, setFilters] = useState<ListingFilters>(EMPTY_FILTERS);
-  const [sort, setSort] = useState<ListingSort>('For you');
-  const [openPanel, setOpenPanel] = useState<Panel | null>(null);
-  const [photoMessage, setPhotoMessage] = useState<string | null>(null);
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const results = useBrowseListings(filters, sort);
-  const people = useBrowsePeople(filters.query);
+  const [query, setQuery] = useState('');
+  const [trendingType, setTrendingType] = useState<Category | null>(null);
+  const trending = useTrendingListings(ROW_LENGTH, trendingType);
+  const newest = useBrowseListings(EMPTY_FILTERS, 'Newest').slice(0, ROW_LENGTH);
 
-  const filterCount =
-    filters.categories.length + filters.events.length + filters.sizes.length + (filters.maxPrice !== null ? 1 : 0);
-  const count = mode === 'Items' ? results.length : people.length;
-  const countLabel =
-    mode === 'Items' ? `${count} ${count === 1 ? 'result' : 'results'}` : `${count} ${count === 1 ? 'person' : 'people'}`;
-
-  function update(patch: Partial<ListingFilters>) {
-    setFilters((current) => ({ ...current, ...patch }));
-  }
-
-  function applyIntent(intent: SearchIntent, query: string) {
-    setPhotoMessage(null);
-    setFilters({
-      query,
-      words: intent.words,
-      interpreted: true,
-      categories: intent.categories,
-      events: intent.events,
-      sizes: intent.sizes,
-      maxPrice: intent.maxPrice,
-    });
-  }
-
-  const understood = [
-    ...filters.events,
-    ...filters.categories,
-    ...filters.sizes,
-    filters.maxPrice !== null ? `under ${formatPrice(filters.maxPrice)}` : null,
-    ...filters.words,
-  ].filter((part): part is string => part !== null);
-  const showUnderstood =
-    filters.interpreted &&
-    (filters.categories.length > 0 ||
-      filters.events.length > 0 ||
-      filters.sizes.length > 0 ||
-      filters.maxPrice !== null);
-
-  async function searchByPhoto() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.4,
-      base64: true,
-    });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    if (!asset?.base64) {
-      setPhotoMessage('Could not read that photo.');
-      return;
-    }
-    setPhotoBusy(true);
-    setPhotoMessage(null);
-    try {
-      const intent = await describePhoto(asset.base64, asset.mimeType ?? 'image/jpeg');
-      applyIntent(intent, describeIntent(intent));
-    } catch (e) {
-      setPhotoMessage(e instanceof Error ? e.message : 'Photo search failed.');
-    } finally {
-      setPhotoBusy(false);
-    }
-  }
-
-  function toggle(panel: Panel) {
-    setOpenPanel((current) => (current === panel ? null : panel));
-  }
-
-  const priceLabel = filters.maxPrice !== null ? `Up to $${filters.maxPrice}/day` : null;
-
-  function renderPanel() {
-    switch (openPanel) {
-      case 'type':
-        return (
-          <FilterPanel onClear={() => update({ categories: [] })} onDone={() => setOpenPanel(null)}>
-            <MultiChipGroup
-              options={CATEGORIES}
-              values={filters.categories}
-              onChange={(categories) => update({ categories })}
-            />
-          </FilterPanel>
-        );
-      case 'event':
-        return (
-          <FilterPanel onClear={() => update({ events: [] })} onDone={() => setOpenPanel(null)}>
-            <MultiChipGroup options={EVENTS} values={filters.events} onChange={(events) => update({ events })} />
-          </FilterPanel>
-        );
-      case 'size':
-        return (
-          <FilterPanel onClear={() => update({ sizes: [] })} onDone={() => setOpenPanel(null)}>
-            <MultiChipGroup options={SIZES} values={filters.sizes} onChange={(sizes) => update({ sizes })} />
-          </FilterPanel>
-        );
-      case 'price':
-        return (
-          <FilterPanel onClear={() => update({ maxPrice: null })} onDone={() => setOpenPanel(null)}>
-            <ChipGroup
-              options={PRICE_LABELS}
-              value={priceLabel}
-              allowDeselect
-              onChange={(label) =>
-                update({ maxPrice: label ? PRICE_LIMITS[PRICE_LABELS.indexOf(label)] : null })
-              }
-            />
-          </FilterPanel>
-        );
-      case 'sort':
-        return (
-          <FilterPanel onClear={() => setSort('For you')} onDone={() => setOpenPanel(null)}>
-            <ChipGroup options={SORT_OPTIONS} value={sort} onChange={(next) => next && setSort(next)} />
-          </FilterPanel>
-        );
-      default:
-        return null;
-    }
+  function search() {
+    const q = query.trim();
+    router.push(q ? { pathname: '/search', params: { q } } : '/search');
+    setQuery('');
   }
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <ThemedText type="subtitle" themeColor="accent">
-              DAM Fashion
-            </ThemedText>
-            <View style={styles.titleActions}>
-              <ChipGroup options={MODES} value={mode} onChange={(next) => next && setMode(next)} />
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.padded}>
+            <View style={styles.titleRow}>
+              <ThemedText type="subtitle" themeColor="accent">
+                Lendr
+              </ThemedText>
               <ProfileButton />
             </View>
+            <TextField
+              variant="search"
+              value={query}
+              onChangeText={setQuery}
+              onSubmitEditing={search}
+              placeholder="Search for outfits, clubs, or events…"
+              returnKeyType="search"
+              autoCorrect={false}
+            />
           </View>
-          <TextField
-            variant="search"
-            value={filters.query}
-            onChangeText={(query) => (mode === 'Items' ? applyIntent(parseSearchQuery(query), query) : update({ query }))}
-            placeholder={mode === 'Items' ? 'Try “black formal dress under $15”' : 'Search people by name'}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-            autoCorrect={false}
-          />
-          {mode === 'Items' ? (
-            <Pressable onPress={searchByPhoto} accessibilityRole="button" hitSlop={8} disabled={photoBusy}>
-              <ThemedText type="small" themeColor="accent">
-                {photoBusy ? 'Reading photo…' : 'Search by photo'}
-              </ThemedText>
-            </Pressable>
-          ) : null}
-          {photoMessage ? (
-            <ThemedText type="small" themeColor="danger">
-              {photoMessage}
-            </ThemedText>
-          ) : null}
-          {mode === 'Items' && showUnderstood ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              Looking for {understood.join(' · ')}
-            </ThemedText>
-          ) : null}
-          {mode === 'Items' ? (
-            <>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                <FilterToggle
-                  label="Type"
-                  count={filters.categories.length}
-                  open={openPanel === 'type'}
-                  onPress={() => toggle('type')}
-                />
-                <FilterToggle
-                  label="Event"
-                  count={filters.events.length}
-                  open={openPanel === 'event'}
-                  onPress={() => toggle('event')}
-                />
-                <FilterToggle
-                  label="Size"
-                  count={filters.sizes.length}
-                  open={openPanel === 'size'}
-                  onPress={() => toggle('size')}
-                />
-                <FilterToggle
-                  label={priceLabel ?? 'Price'}
-                  count={0}
-                  open={openPanel === 'price'}
-                  onPress={() => toggle('price')}
-                />
-                <FilterToggle
-                  label={`Sort: ${sort}`}
-                  count={0}
-                  open={openPanel === 'sort'}
-                  onPress={() => toggle('sort')}
-                />
-              </ScrollView>
-              {renderPanel()}
-            </>
-          ) : null}
-          <View style={styles.summary}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {countLabel}
-            </ThemedText>
-            {mode === 'Items' && filterCount > 0 ? (
-              <Pressable
-                onPress={() => {
-                  setFilters(EMPTY_FILTERS);
-                  setPhotoMessage(null);
-                }}
-                accessibilityRole="button"
-                hitSlop={8}>
-                <ThemedText type="small" themeColor="accent">
-                  Clear all filters
-                </ThemedText>
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
 
-        {mode === 'Items' ? (
-          <ListingGrid listings={results} emptyText="No items match your search." />
-        ) : (
-          <FlatList
-            data={people}
-            keyExtractor={(user) => user.id}
-            renderItem={({ item }) => <UserRow user={item} />}
-            ListEmptyComponent={
-              <ThemedText themeColor="textSecondary" style={styles.empty}>
-                No one by that name.
-              </ThemedText>
+          <View style={styles.section}>
+            <ThemedText style={[styles.padded, styles.hero]}>
+              Find your fit <ThemedText style={styles.hero} themeColor="accent">on campus</ThemedText>
+            </ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+              {EVENT_TILES.map((tile) => (
+                <EventTile key={tile.event} {...tile} />
+              ))}
+            </ScrollView>
+          </View>
+
+          <ListingRow
+            title="Trending now"
+            listings={trending}
+            onViewAll={() =>
+              router.push(trendingType ? { pathname: '/search', params: { category: trendingType } } : '/search')
             }
-            keyboardShouldPersistTaps="handled"
+            filter={
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                <Chip label="All" selected={trendingType === null} onPress={() => setTrendingType(null)} />
+                {CATEGORIES.map((category) => (
+                  <Chip
+                    key={category}
+                    label={category}
+                    selected={trendingType === category}
+                    onPress={() => setTrendingType(category)}
+                  />
+                ))}
+              </ScrollView>
+            }
+            emptyText={trendingType ? `No ${trendingType.toLowerCase()} trending right now.` : undefined}
           />
-        )}
+          <ListingRow
+            title="New Arrivals"
+            listings={newest}
+            onViewAll={() => router.push({ pathname: '/search', params: { sort: 'Newest' } })}
+          />
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function EventTile({ event, label, icon }: { event: EventTag; label: string; icon: string }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={() => router.push({ pathname: '/search', params: { event } })}
+      accessibilityRole="button"
+      accessibilityLabel={`Browse ${label} outfits`}
+      style={({ pressed }) => [styles.tile, pressed && styles.pressed]}>
+      <View style={[styles.tileIcon, { backgroundColor: theme.backgroundElement }]}>
+        <ThemedText style={styles.tileEmoji}>{icon}</ThemedText>
+      </View>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.tileLabel} numberOfLines={1}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+type ListingRowProps = {
+  title: string;
+  listings: Listing[];
+  onViewAll: () => void;
+  /** Optional chips under the title, e.g. to narrow by type. */
+  filter?: ReactNode;
+  /** Shown instead of hiding the row when it's empty (only when there's a filter to change). */
+  emptyText?: string;
+};
+
+function ListingRow({ title, listings, onViewAll, filter, emptyText }: ListingRowProps) {
+  if (listings.length === 0 && !emptyText) return null;
+  return (
+    <View style={styles.section}>
+      <View style={[styles.padded, styles.sectionHeader]}>
+        <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+        <Pressable onPress={onViewAll} accessibilityRole="link" accessibilityLabel={`View all ${title}`} hitSlop={8}>
+          <ThemedText type="smallBold" themeColor="accent" style={styles.viewAll}>
+            View all
+          </ThemedText>
+        </Pressable>
+      </View>
+      {filter}
+      {listings.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.padded}>
+          {emptyText}
+        </ThemedText>
+      ) : null}
+      <FlatList
+        horizontal
+        data={listings}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <ListingCard listing={item} />
+          </View>
+        )}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+      />
+    </View>
   );
 }
 
@@ -280,33 +174,75 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: Spacing.three,
+  content: {
     paddingTop: Spacing.three,
-    paddingBottom: Spacing.three,
+    paddingBottom: Spacing.five,
+    gap: Spacing.five,
+  },
+  padded: {
+    paddingHorizontal: Spacing.three,
     gap: Spacing.three,
   },
   titleRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: Spacing.two,
   },
-  titleActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
+  section: {
+    gap: Spacing.three,
+  },
+  hero: {
+    fontFamily: Fonts.heading,
+    fontSize: 30,
+    lineHeight: 36,
+  },
+  row: {
+    paddingHorizontal: Spacing.three,
+    gap: Spacing.three,
   },
   chips: {
+    paddingHorizontal: Spacing.three,
     gap: Spacing.two,
   },
-  summary: {
+  tile: {
+    width: 76,
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  tileIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileEmoji: {
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  tileLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sectionHeader: {
     flexDirection: 'row',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
   },
-  empty: {
-    textAlign: 'center',
-    padding: Spacing.five,
+  sectionTitle: {
+    fontFamily: Fonts.heading,
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  viewAll: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
+  card: {
+    width: 150,
   },
 });

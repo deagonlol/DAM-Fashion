@@ -23,7 +23,7 @@ import { formatDateRange, formatMessageTime } from '@/lib/format';
 const TABS = ['Open', 'Reviewed'] as const;
 type Tab = (typeof TABS)[number];
 
-/** DAM Fashion team queue: uphold a report (adds a strike) or dismiss it. */
+/** Lendr team queue: uphold a report (adds a strike) or dismiss it. */
 export default function AdminReportsScreen() {
   const user = useCurrentUser();
   const reports = useReports();
@@ -40,7 +40,7 @@ export default function AdminReportsScreen() {
   if (user.role !== 'admin') {
     return (
       <ThemedView style={styles.centered}>
-        <ThemedText themeColor="textSecondary">Only the DAM Fashion team can see this.</ThemedText>
+        <ThemedText themeColor="textSecondary">Only the Lendr team can see this.</ThemedText>
       </ThemedView>
     );
   }

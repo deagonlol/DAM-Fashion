@@ -34,12 +34,15 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.background }}>
           {listing.title}
         </ThemedText>
+        <ThemedText type="small" numberOfLines={1} style={{ color: theme.textSecondary }}>
+          {listing.brand ? `${listing.size} · ${listing.brand}` : `Size ${listing.size}`}
+        </ThemedText>
         <ThemedText type="small" numberOfLines={2} style={{ color: theme.accent }}>
           {listing.soldAt
             ? 'Sold'
             : `${formatPricePerDay(listing.pricePerDay)}${
                 listing.salePrice != null ? ` · ${formatPrice(listing.salePrice)} to buy` : ''
-              } · ${listing.size}`}
+              }`}
         </ThemedText>
       </View>
     </Pressable>

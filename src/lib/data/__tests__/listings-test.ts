@@ -1,4 +1,4 @@
-import { EMPTY_FILTERS, matchesFilters, sortListings } from '../listings';
+import { EMPTY_FILTERS, matchesFilters, similarListings, sortListings, trendingListings } from '../listings';
 import type { Listing, ListingFilters } from '../types';
 
 function listing(overrides: Partial<Listing> & Pick<Listing, 'id'>): Listing {
@@ -106,6 +106,23 @@ describe('sortListings', () => {
     const input = [...dated];
     sortListings(input, 'Price: low to high', '');
     expect(order(input)).toEqual(['old', 'new', 'mid']);
+  });
+});
+
+describe('trendingListings', () => {
+  it('puts the most-saved first, keeps the given order for ties, and stops at the limit', () => {
+    const ids = (items: Listing[]) => items.map((item) => item.id);
+    expect(ids(trendingListings(all, { blazer: 3, dress: 1 }, 3))).toEqual(['blazer', 'dress', 'polo']);
+    expect(ids(trendingListings(all, {}, 2))).toEqual(['polo', 'dress']);
+  });
+});
+
+describe('similarListings', () => {
+  it('ranks same type above a shared event and skips unrelated items and itself', () => {
+    const gown = listing({ id: 'gown', category: 'Dresses', events: ['Formal'] });
+    const tux = listing({ id: 'tux', category: 'Suits & Blazers', events: ['Formal'] });
+    const ids = similarListings(dress, [dress, polo, tux, gown], 5).map((item) => item.id);
+    expect(ids).toEqual(['gown', 'tux']);
   });
 });
 

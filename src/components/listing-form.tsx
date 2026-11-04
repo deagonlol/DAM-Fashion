@@ -18,10 +18,12 @@ import {
   CATEGORIES,
   EVENTS,
   MAX_LISTING_PHOTOS,
+  PICKUP_SPOTS,
   SIZES,
   type Category,
   type EventTag,
   type NewListing,
+  type PickupSpot,
   type Size,
 } from '@/lib/data/types';
 
@@ -60,6 +62,8 @@ export function ListingForm({
   const [category, setCategory] = useState<Category | null>(initial?.category ?? null);
   const [events, setEvents] = useState<EventTag[]>(initial?.events ?? []);
   const [size, setSize] = useState<Size | null>(initial?.size ?? null);
+  const [brand, setBrand] = useState(initial?.brand ?? '');
+  const [pickupSpots, setPickupSpots] = useState<PickupSpot[]>(initial?.pickupSpots ?? []);
   const [price, setPrice] = useState(initial ? String(initial.pricePerDay) : '');
   const [salePrice, setSalePrice] = useState(initial?.salePrice != null ? String(initial.salePrice) : '');
   const [submitting, setSubmitting] = useState(false);
@@ -114,6 +118,8 @@ export function ListingForm({
     setCategory(null);
     setEvents([]);
     setSize(null);
+    setBrand('');
+    setPickupSpots([]);
     setPrice('');
     setSalePrice('');
   }
@@ -130,6 +136,8 @@ export function ListingForm({
         category,
         events,
         size,
+        brand: brand.trim(),
+        pickupSpots,
         pricePerDay,
         salePrice: saleAmount ?? undefined,
       });
@@ -228,6 +236,21 @@ export function ListingForm({
 
             <Field label="Size">
               <ChipGroup options={SIZES} value={size} onChange={setSize} />
+            </Field>
+
+            <TextField
+              label="Brand (optional)"
+              value={brand}
+              onChangeText={setBrand}
+              placeholder="e.g. Levi's"
+              maxLength={40}
+            />
+
+            <Field label="Pickup spots (optional)">
+              <MultiChipGroup options={PICKUP_SPOTS} values={pickupSpots} onChange={setPickupSpots} />
+              <ThemedText type="small" themeColor="textSecondary">
+                Pick where you’re happy to meet. Leave blank and borrowers can choose any of these.
+              </ThemedText>
             </Field>
 
             <TextField

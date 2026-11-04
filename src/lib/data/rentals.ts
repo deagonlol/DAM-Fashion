@@ -46,6 +46,28 @@ export function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd
   return aStart <= bEnd && bStart <= aEnd;
 }
 
+export type DateRange = { startDate: string; endDate: string };
+
+/**
+ * The borrow dates after tapping a day on the calendar. The first tap picks the pickup day; a
+ * later day then sets the return day, as long as every day between is free and it fits within
+ * MAX_RENTAL_DAYS. Anything else starts over from the tapped day.
+ */
+export function pickRange(
+  current: DateRange | null,
+  date: string,
+  isFree: (start: string, end: string) => boolean
+): DateRange | null {
+  if (!isFree(date, date)) return current;
+  if (current && current.startDate === current.endDate && date > current.startDate) {
+    const extended = { startDate: current.startDate, endDate: date };
+    if (rentalDays(extended.startDate, extended.endDate) <= MAX_RENTAL_DAYS && isFree(extended.startDate, date)) {
+      return extended;
+    }
+  }
+  return { startDate: date, endDate: date };
+}
+
 /** When the item is due back: the end of the return date, local time. */
 export function dueAt(rental: Rental) {
   return new Date(`${rental.endDate}T23:59:59`);
@@ -121,6 +143,9 @@ export function validateRequest(
   }
   if (request.offeredPricePerDay != null && request.offeredPricePerDay < listing.pricePerDay) {
     throw new RentalError('Offer at least the listed daily price.');
+  }
+  if (listing.pickupSpots?.length && !listing.pickupSpots.includes(request.pickupSpot)) {
+    throw new RentalError("Pick one of the lender's pickup spots.");
   }
   if (request.startDate < today) {
     throw new RentalError('Pick a pickup date from today on.');
@@ -270,19 +295,79 @@ export function lendCount(rentals: Rental[], lenderId: string) {
   return rentals.filter((rental) => rental.lenderId === lenderId && rental.status === 'returned').length;
 }
 
+const ACTIVE_ORDER: RentalStatus[] = ['requested', 'accepted', 'picked_up'];
+const PAST_ORDER: RentalStatus[] = ['returned', 'no_show'];
+
 /**
- * Items currently out (`picked_up`), split by the user's role.
- * `rented` = user is the borrower; `lent` = user is the lender. Other statuses are omitted.
+ * The user's borrows on one side, for the Orders tab. Active ones (waiting, scheduled, or out)
+ * come soonest first; past ones (returned or missed) newest first. Declined and cancelled
+ * requests never happened, so they're left out.
  */
-export function outOnBorrow(rentals: Rental[], userId: string) {
-  const rented: Rental[] = [];
-  const lent: Rental[] = [];
-  for (const rental of rentals) {
-    if (rental.status !== 'picked_up') continue;
-    if (rental.borrowerId === userId) rented.push(rental);
-    else if (rental.lenderId === userId) lent.push(rental);
+export function ordersFor(rentals: Rental[], userId: string, role: 'borrower' | 'lender') {
+  const mine = rentals.filter((rental) => (role === 'borrower' ? rental.borrowerId : rental.lenderId) === userId);
+  return {
+    active: mine
+      .filter((rental) => ACTIVE_ORDER.includes(rental.status))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    past: mine
+      .filter((rental) => PAST_ORDER.includes(rental.status))
+      .sort((a, b) => b.endDate.localeCompare(a.endDate)),
+  };
+}
+
+/** "today", "tomorrow", or a short date like "Fri, Oct 18". */
+function dayLabel(date: string, now: Date) {
+  const today = toDateString(now);
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (date === today) return 'today';
+  if (date === toDateString(tomorrow)) return 'tomorrow';
+  return new Date(`${date}T00:00:00`).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+export type OrderStatus = {
+  /** Small caps label, e.g. "Return countdown". */
+  label: string;
+  /** The main line, e.g. "Return by tomorrow". */
+  text: string;
+  tone: 'accent' | 'danger' | 'muted';
+};
+
+/** What an order card says about where a borrow stands, from the borrower's or lender's side. */
+export function orderStatus(rental: Rental, now: Date, role: 'borrower' | 'lender' = 'borrower'): OrderStatus {
+  switch (rental.status) {
+    case 'requested':
+      return role === 'lender'
+        ? { label: 'Needs your answer', text: `Pickup ${dayLabel(rental.startDate, now)}`, tone: 'accent' }
+        : { label: 'Waiting for lender', text: `Pickup ${dayLabel(rental.startDate, now)}`, tone: 'muted' };
+    case 'accepted':
+      return {
+        label: 'Pickup',
+        text: `${capitalize(dayLabel(rental.startDate, now))} at ${rental.pickupSpot}`,
+        tone: 'accent',
+      };
+    case 'picked_up': {
+      const late = daysOverdue(rental, now);
+      if (late > 0) {
+        return { label: 'Overdue', text: late === 1 ? '1 day late' : `${late} days late`, tone: 'danger' };
+      }
+      return { label: 'Return countdown', text: `Return by ${dayLabel(rental.endDate, now)}`, tone: 'accent' };
+    }
+    case 'returned':
+      return {
+        label: rental.returnedLate ? 'Returned late' : 'Returned',
+        text: dayLabel(toDateString(new Date(rental.returnedAt ?? `${rental.endDate}T12:00:00`)), now),
+        tone: 'muted',
+      };
+    case 'no_show':
+      return { label: 'Missed pickup', text: dayLabel(rental.startDate, now), tone: 'muted' };
+    default:
+      return { label: rental.status === 'declined' ? 'Declined' : 'Cancelled', text: '', tone: 'muted' };
   }
-  return { rented, lent };
+}
+
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // ---- Store ---------------------------------------------------------------------------------
@@ -429,6 +514,18 @@ export function bookedDays(rentals: Rental[], listingId: string) {
     }
   }
   return days;
+}
+
+/** Whether a listing could be borrowed on this day: no accepted or active borrow, and not blocked off. */
+export function isAvailableOn(rentals: Rental[], listing: Listing, date: string) {
+  if (listing.blockedDates?.includes(date)) return false;
+  return !rentals.some(
+    (rental) =>
+      rental.listingId === listing.id &&
+      BOOKED.includes(rental.status) &&
+      rental.startDate <= date &&
+      date <= rental.endDate
+  );
 }
 
 /** Booked date ranges for a listing, for showing availability. */
