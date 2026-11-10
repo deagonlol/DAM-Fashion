@@ -5,7 +5,7 @@ import type { User } from '@/lib/data/types';
 
 /** The signed-in user, or null when signed out. */
 export function useSession() {
-  return useSyncExternalStore(subscribeToSession, getSessionSnapshot);
+  return useSyncExternalStore(subscribeToSession, getSessionSnapshot, getSessionSnapshot);
 }
 
 /**
@@ -13,7 +13,7 @@ export function useSession() {
  * during sign-out, so a screen re-rendering before the guard removes it doesn't crash.
  */
 export function useCurrentUser(): User {
-  const user = useSyncExternalStore(subscribeToSession, getLastSignedInUserSnapshot);
+  const user = useSyncExternalStore(subscribeToSession, getLastSignedInUserSnapshot, getLastSignedInUserSnapshot);
   if (!user) {
     throw new Error('useCurrentUser called before anyone signed in.');
   }

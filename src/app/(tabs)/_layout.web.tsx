@@ -1,4 +1,4 @@
-import Tabs from "expo-router/js-tabs";
+import { Tabs } from "expo-router/js-tabs";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import type { ColorValue } from "react-native";
 

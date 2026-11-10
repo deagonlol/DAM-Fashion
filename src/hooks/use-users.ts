@@ -12,7 +12,7 @@ import type { EventTag } from '@/lib/data/types';
 import { getUsersSnapshot, subscribeToUsers, userMatches } from '@/lib/data/users';
 
 function useAllUsers() {
-  return useSyncExternalStore(subscribeToUsers, getUsersSnapshot);
+  return useSyncExternalStore(subscribeToUsers, getUsersSnapshot, getUsersSnapshot);
 }
 
 export function useUser(id: string | undefined) {

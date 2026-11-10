@@ -11,13 +11,13 @@ import {
 
 /** The signed-in user's saves. */
 function useAllSaves() {
-  return useSyncExternalStore(subscribeToSaves, getSavesSnapshot);
+  return useSyncExternalStore(subscribeToSaves, getSavesSnapshot, getSavesSnapshot);
 }
 
 /** Whether the signed-in user saved the listing, and how many people saved it in total. */
 export function useSaveState(listingId: string) {
   const saves = useAllSaves();
-  const counts = useSyncExternalStore(subscribeToSaveCounts, getSaveCountsSnapshot);
+  const counts = useSyncExternalStore(subscribeToSaveCounts, getSaveCountsSnapshot, getSaveCountsSnapshot);
   const user = useCurrentUser();
   return useMemo(
     () => ({

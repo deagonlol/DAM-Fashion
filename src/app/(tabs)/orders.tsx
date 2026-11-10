@@ -95,7 +95,7 @@ export default function OrdersScreen() {
                 </ThemedText>
                 <ThemedText type="smallBold">Add new listing</ThemedText>
               </Pressable>
-            ) : null
+            ) : undefined
           }
           ListEmptyComponent={
             <ThemedText themeColor="textSecondary" style={styles.empty}>

@@ -4,7 +4,7 @@ import { getSalesSnapshot, subscribeToSales } from '@/lib/data/sales';
 import type { Sale } from '@/lib/data/types';
 
 export function useSales() {
-  return useSyncExternalStore(subscribeToSales, getSalesSnapshot);
+  return useSyncExternalStore(subscribeToSales, getSalesSnapshot, getSalesSnapshot);
 }
 
 export function useSale(id: string | undefined) {

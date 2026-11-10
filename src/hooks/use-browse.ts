@@ -34,7 +34,7 @@ export function useBrowseListings(filters: ListingFilters, sort: ListingSort) {
 /** Most-saved listings anyone can borrow right now, for Home's "Trending now" row, optionally of one type. */
 export function useTrendingListings(limit: number, category: Category | null = null) {
   const listings = useBrowseListings(EMPTY_FILTERS, 'Newest');
-  const counts = useSyncExternalStore(subscribeToSaveCounts, getSaveCountsSnapshot);
+  const counts = useSyncExternalStore(subscribeToSaveCounts, getSaveCountsSnapshot, getSaveCountsSnapshot);
   return useMemo(
     () =>
       trendingListings(

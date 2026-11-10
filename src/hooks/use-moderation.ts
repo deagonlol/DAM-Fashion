@@ -15,11 +15,11 @@ import {
 import { getUsersSnapshot, subscribeToUsers } from '@/lib/data/users';
 
 export function useReports() {
-  return useSyncExternalStore(subscribeToReports, getReportsSnapshot);
+  return useSyncExternalStore(subscribeToReports, getReportsSnapshot, getReportsSnapshot);
 }
 
 export function useBlocks() {
-  return useSyncExternalStore(subscribeToBlocks, getBlocksSnapshot);
+  return useSyncExternalStore(subscribeToBlocks, getBlocksSnapshot, getBlocksSnapshot);
 }
 
 export function useStrikes(userId: string) {
@@ -37,7 +37,7 @@ export function usePenalty(userId: string): Penalty {
 
 /** Ids of users currently soft-banned or banned, for filtering what others see. */
 export function useRestrictedUserIds() {
-  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot);
+  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot, getUsersSnapshot);
   const rentals = useRentals();
   const reports = useReports();
   const now = useNow();

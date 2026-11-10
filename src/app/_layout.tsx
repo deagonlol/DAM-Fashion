@@ -46,6 +46,7 @@ export default function RootLayout() {
   const authReady = useSyncExternalStore(
     subscribeToAuthReady,
     getAuthReadySnapshot,
+    getAuthReadySnapshot,
   );
   const [fontsLoaded, fontError] = useFonts({
     Outfit_700Bold,

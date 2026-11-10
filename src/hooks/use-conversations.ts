@@ -22,15 +22,15 @@ export type ConversationSummary = {
 };
 
 function useAllMessages() {
-  return useSyncExternalStore(subscribeToMessages, getMessagesSnapshot);
+  return useSyncExternalStore(subscribeToMessages, getMessagesSnapshot, getMessagesSnapshot);
 }
 
 /** The current user's conversations, most recently active first. */
 export function useConversationSummaries(): ConversationSummary[] {
   const currentUser = useCurrentUser();
-  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot);
+  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot, getConversationsSnapshot);
   const messages = useAllMessages();
-  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot);
+  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot, getUsersSnapshot);
   const listings = useListings();
 
   return useMemo(() => {
@@ -58,7 +58,7 @@ export function useConversationSummaries(): ConversationSummary[] {
 }
 
 export function useConversation(id: string | undefined) {
-  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot);
+  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot, getConversationsSnapshot);
   return useMemo(() => conversations.find((conversation) => conversation.id === id), [conversations, id]);
 }
 

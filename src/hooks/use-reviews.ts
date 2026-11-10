@@ -5,7 +5,7 @@ import { useRentals } from '@/hooks/use-rentals';
 import { getReviewsSnapshot, isReviewVisible, subscribeToReviews, visibleReviewsAbout } from '@/lib/data/reviews';
 
 export function useAllReviews() {
-  return useSyncExternalStore(subscribeToReviews, getReviewsSnapshot);
+  return useSyncExternalStore(subscribeToReviews, getReviewsSnapshot, getReviewsSnapshot);
 }
 
 /** Public reviews about a user, newest first. */

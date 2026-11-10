@@ -9,7 +9,7 @@ import type { Rental } from '@/lib/data/types';
 import { getUsersSnapshot, subscribeToUsers } from '@/lib/data/users';
 
 export function useRentals() {
-  return useSyncExternalStore(subscribeToRentals, getRentalsSnapshot);
+  return useSyncExternalStore(subscribeToRentals, getRentalsSnapshot, getRentalsSnapshot);
 }
 
 export function useRental(id: string | undefined) {
@@ -24,7 +24,7 @@ export function useRental(id: string | undefined) {
 export function useOrders(userId: string, role: 'borrower' | 'lender', query = '') {
   const rentals = useRentals();
   const listings = useListings();
-  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot);
+  const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot, getUsersSnapshot);
   return useMemo(() => {
     const q = query.trim().toLowerCase();
     const matching = q
@@ -54,7 +54,7 @@ export type ActivityItem = {
  */
 export function useActivity(userId: string): ActivityItem[] {
   const rentals = useRentals();
-  const reviews = useSyncExternalStore(subscribeToReviews, getReviewsSnapshot);
+  const reviews = useSyncExternalStore(subscribeToReviews, getReviewsSnapshot, getReviewsSnapshot);
   const now = useNow();
 
   return useMemo(() => {

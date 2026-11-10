@@ -7,7 +7,7 @@ import { tasteFromListings } from '@/lib/data/search';
 import type { ListingFilters, ListingSort } from '@/lib/data/types';
 
 export function useListings() {
-  return useSyncExternalStore(subscribeToListings, getListingsSnapshot);
+  return useSyncExternalStore(subscribeToListings, getListingsSnapshot, getListingsSnapshot);
 }
 
 export function useFilteredListings(filters: ListingFilters, sort: ListingSort = 'For you') {
@@ -47,6 +47,6 @@ export function useListingsByOwner(ownerId: string) {
 /** Listings a user has borrowed, most recently borrowed first, each item once. */
 export function useBorrowedListings(borrowerId: string) {
   const listings = useListings();
-  const rentals = useSyncExternalStore(subscribeToRentals, getRentalsSnapshot);
+  const rentals = useSyncExternalStore(subscribeToRentals, getRentalsSnapshot, getRentalsSnapshot);
   return useMemo(() => borrowedListings(rentals, listings, borrowerId), [listings, rentals, borrowerId]);
 }
