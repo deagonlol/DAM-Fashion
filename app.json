@@ -45,6 +45,9 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "tinyclipUrl": "https://lendr-tinyclip.onrender.com"
     }
   }
 }

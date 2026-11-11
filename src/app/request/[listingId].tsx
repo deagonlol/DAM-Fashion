@@ -54,8 +54,7 @@ export default function RequestBorrowScreen() {
   const booked = useMemo(
     () =>
       rentals.filter(
-        (rental) =>
-          rental.listingId === listingId && (rental.status === 'accepted' || rental.status === 'picked_up')
+        (rental) => rental.listingId === listingId && (rental.status === 'accepted' || rental.status === 'picked_up')
       ),
     [rentals, listingId]
   );
@@ -72,13 +71,21 @@ export default function RequestBorrowScreen() {
       </ThemedView>
     );
   }
+  if (listing.rentable === false) {
+    return (
+      <ThemedView style={styles.centered}>
+        <ThemedText themeColor="textSecondary">This item is only for sale.</ThemedText>
+      </ThemedView>
+    );
+  }
 
   const startDate = range?.startDate ?? null;
   const endDate = range?.endDate ?? null;
   const days = range ? rentalDays(range.startDate, range.endDate) : 0;
   const offerText = offer || (listing ? String(listing.pricePerDay) : '');
   const offeredPricePerDay = Number(offerText);
-  const offerOk = Number.isFinite(offeredPricePerDay) && listing !== undefined && offeredPricePerDay >= listing.pricePerDay;
+  const offerOk =
+    Number.isFinite(offeredPricePerDay) && listing !== undefined && offeredPricePerDay >= listing.pricePerDay;
   const competing =
     listing && startDate && endDate ? openOfferCount(rentals, listing.id, startDate, endDate, user.id) : 0;
   // Times that have already passed today can't be picked.
@@ -87,10 +94,8 @@ export default function RequestBorrowScreen() {
   const pickupPast = (time: string) => startDate === today && time <= nowTime;
   const sameDay = startDate !== null && startDate === endDate;
   const returnTooEarly = (time: string) => sameDay && pickupTime !== null && time <= pickupTime;
-  const timesOk =
-    pickupTime !== null && returnTime !== null && !pickupPast(pickupTime) && !returnTooEarly(returnTime);
-  const canSubmit =
-    startDate !== null && endDate !== null && pickupSpot !== null && timesOk && offerOk && !submitting;
+  const timesOk = pickupTime !== null && returnTime !== null && !pickupPast(pickupTime) && !returnTooEarly(returnTime);
+  const canSubmit = startDate !== null && endDate !== null && pickupSpot !== null && timesOk && offerOk && !submitting;
 
   async function handleSubmit() {
     if (!startDate || !endDate || !pickupSpot || !listing) return;

@@ -1,0 +1,5 @@
+# Only for export_onnx.py (Docker build stage, or a local re-export).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0
+transformers==5.22.2
+onnx==1.23.2

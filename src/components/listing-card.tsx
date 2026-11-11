@@ -16,11 +16,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
     <Pressable
       onPress={() => router.push(`/listing/${listing.id}`)}
       accessibilityRole="link"
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: theme.card },
-        pressed && styles.pressed,
-      ]}>
+      style={({ pressed }) => [styles.card, { backgroundColor: theme.card }, pressed && styles.pressed]}>
       <View>
         <Image
           source={listing.imageUris[0]}
@@ -40,9 +36,11 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <ThemedText type="small" numberOfLines={2} style={{ color: theme.accent }}>
           {listing.soldAt
             ? 'Sold'
-            : `${formatPricePerDay(listing.pricePerDay)}${
-                listing.salePrice != null ? ` · ${formatPrice(listing.salePrice)} to buy` : ''
-              }`}
+            : listing.rentable === false
+              ? `${formatPrice(listing.salePrice ?? 0)} to buy`
+              : `${formatPricePerDay(listing.pricePerDay)}${
+                  listing.salePrice != null ? ` · ${formatPrice(listing.salePrice)} to buy` : ''
+                }`}
         </ThemedText>
       </View>
     </Pressable>

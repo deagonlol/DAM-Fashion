@@ -32,7 +32,18 @@ export const EMPTY_FILTERS: ListingFilters = {
   events: [],
   sizes: [],
   maxPrice: null,
+  deal: null,
 };
+
+/** Whether a listing can be borrowed at all. Sell-only listings can't. */
+export function isRentable(listing: Listing) {
+  return listing.rentable !== false;
+}
+
+/** Whether a listing can be bought right now. */
+export function isBuyable(listing: Listing) {
+  return listing.salePrice != null && !listing.soldAt;
+}
 
 /** Words a sentence was parsed into, or the raw query when the user typed a plain search. */
 function searchTerms(filters: ListingFilters) {
@@ -58,7 +69,10 @@ export function matchesFilters(listing: Listing, filters: ListingFilters) {
     return false;
   }
   if (filters.sizes.length > 0 && !filters.sizes.includes(listing.size)) return false;
-  if (filters.maxPrice !== null && listing.pricePerDay > filters.maxPrice) return false;
+  // The daily price limit is about renting, so sell-only listings don't count as under it.
+  if (filters.maxPrice !== null && (!isRentable(listing) || listing.pricePerDay > filters.maxPrice)) return false;
+  if (filters.deal === 'Rent' && !isRentable(listing)) return false;
+  if (filters.deal === 'Buy' && !isBuyable(listing)) return false;
   return true;
 }
 
@@ -92,13 +106,10 @@ export function sortListings(
       return sorted.sort(
         (a, b) =>
           forYouScore(b, context?.taste ?? { events: [], categories: [] }, context?.words ?? []) -
-            forYouScore(a, context?.taste ?? { events: [], categories: [] }, context?.words ?? []) ||
-          newestFirst(a, b)
+            forYouScore(a, context?.taste ?? { events: [], categories: [] }, context?.words ?? []) || newestFirst(a, b)
       );
     case 'Most relevant':
-      return sorted.sort(
-        (a, b) => relevanceScore(b, query) - relevanceScore(a, query) || newestFirst(a, b)
-      );
+      return sorted.sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query) || newestFirst(a, b));
     case 'Price: low to high':
       return sorted.sort((a, b) => a.pricePerDay - b.pricePerDay || newestFirst(a, b));
     case 'Price: high to low':
@@ -161,6 +172,7 @@ async function listingColumns(ownerId: string, input: NewListing) {
     pickup_spots: input.pickupSpots ?? [],
     price_per_day: input.pricePerDay,
     sale_price: input.salePrice ?? null,
+    rentable: input.rentable !== false,
     image_uris: await uploadPhotos('listing-photos', ownerId, input.imageUris),
   };
 }
@@ -242,7 +254,9 @@ export async function deleteListing(id: string) {
   rentalsStore.set(
     rentalsStore
       .get()
-      .map((rental) => (rental.listingId === id && rental.status === 'requested' ? { ...rental, status: 'declined' } : rental))
+      .map((rental) =>
+        rental.listingId === id && rental.status === 'requested' ? { ...rental, status: 'declined' } : rental
+      )
   );
   listingsStore.set(listingsStore.get().filter((candidate) => candidate.id !== id));
   declineSalesForListing(id);

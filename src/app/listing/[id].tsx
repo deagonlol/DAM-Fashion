@@ -150,13 +150,13 @@ export default function ListingDetailScreen() {
             variant={canBuy ? 'outline' : 'primary'}
             onPress={() => router.push(`/rental/${myOpenBorrow.id}`)}
           />
-        ) : (
+        ) : listing.rentable !== false ? (
           <Button
             title="Rent"
             variant={canBuy ? 'outline' : 'primary'}
             onPress={() => router.push(`/request/${listing.id}`)}
           />
-        )}
+        ) : null}
       </>
     );
   }
@@ -169,7 +169,11 @@ export default function ListingDetailScreen() {
         <View style={styles.body}>
           <View style={styles.titleRow}>
             <ThemedText style={[styles.title, styles.flex]}>{listing.title}</ThemedText>
-            <ThemedText style={styles.price}>{formatPricePerDay(listing.pricePerDay)}</ThemedText>
+            <ThemedText style={styles.price}>
+              {listing.rentable === false
+                ? formatPrice(listing.salePrice ?? 0)
+                : formatPricePerDay(listing.pricePerDay)}
+            </ThemedText>
           </View>
           <View style={styles.metaRow}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.flex}>
@@ -218,7 +222,7 @@ export default function ListingDetailScreen() {
             </ThemedText>
           ) : null}
 
-          {!listing.soldAt ? (
+          {!listing.soldAt && listing.rentable !== false ? (
             <View style={styles.section}>
               <ThemedText type="smallBold">Availability</ThemedText>
               <AvailabilityCalendar bookedDates={bookedDates} blockedDates={new Set(listing.blockedDates ?? [])} />

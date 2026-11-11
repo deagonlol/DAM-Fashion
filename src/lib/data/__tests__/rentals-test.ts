@@ -575,3 +575,11 @@ describe('validateRequest times', () => {
     ).not.toThrow();
   });
 });
+
+describe('sell-only listings', () => {
+  it("can't be borrowed", () => {
+    const item = { ...listing('a', 'owner'), rentable: false, pricePerDay: 0, salePrice: 30 };
+    const request = { listingId: 'a', startDate: '2026-10-25', endDate: '2026-10-26', pickupSpot: 'Texas Union' as const };
+    expect(() => validateRequest([], item, 'me', request, '2026-10-20')).toThrow('only for sale');
+  });
+});

@@ -148,6 +148,9 @@ export function validateRequest(
   if (listing.paused) {
     throw new RentalError("This item isn't available to borrow right now.");
   }
+  if (listing.rentable === false) {
+    throw new RentalError('This item is only for sale.');
+  }
   if (request.offeredPricePerDay != null && request.offeredPricePerDay < listing.pricePerDay) {
     throw new RentalError('Offer at least the listed daily price.');
   }

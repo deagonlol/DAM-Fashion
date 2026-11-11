@@ -1,6 +1,6 @@
 # Demo photo credits
 
-The test listings use these photos from [Wikimedia Commons](https://commons.wikimedia.org). Each is under the license shown; Creative Commons BY and BY-SA licenses require this credit. Set by `supabase/demo_photos.sql` and `supabase/demo_photos_2.sql`. Replace them with your own photos before launch.
+The test listings use these photos from [Wikimedia Commons](https://commons.wikimedia.org). Each is under the license shown; Creative Commons BY and BY-SA licenses require this credit. Set by `supabase/demo_photos.sql`, `supabase/demo_photos_2.sql` and `supabase/demo_listings_thrift.sql` (l31–l43). Replace them with your own photos before launch.
 
 | Listing | Photo | Author | License |
 |---|---|---|---|
@@ -32,3 +32,18 @@ The test listings use these photos from [Wikimedia Commons](https://commons.wiki
 | l22 | [New Junon evening dress (51580).jpg](https://commons.wikimedia.org/wiki/File:New_Junon_evening_dress_(51580).jpg) | Rhododendrites | CC BY-SA 4.0 |
 | l26 | [Jorts, back view.jpg](https://commons.wikimedia.org/wiki/File:Jorts,_back_view.jpg) | Collabratude | CC BY 2.0 |
 | l29 | [Bow tie.jpg](https://commons.wikimedia.org/wiki/File:Bow_tie.jpg) | David Ring | CC0 |
+| l12 | [Haarspangen.jpg](https://commons.wikimedia.org/wiki/File:Haarspangen.jpg) | Gerd Fahrenhorst | CC BY 3.0 |
+| l30 | [GregoryAntonBurgundySmokingJacket.jpg](https://commons.wikimedia.org/wiki/File:GregoryAntonBurgundySmokingJacket.jpg) | pop culture geek | CC BY 2.0 |
+| l31 | [1963 Orange State College(CSUF) Titans Lettermen's Jacket2.jpg](https://commons.wikimedia.org/wiki/File:1963_Orange_State_College(CSUF)_Titans_Lettermen%27s_Jacket2.jpg) | Pellaman | CC BY-SA 4.0 |
+| l32 | [Claire McCardell day dress, yellow and black plaid wool, c 1950.jpg](https://commons.wikimedia.org/wiki/File:Claire_McCardell_day_dress,_yellow_and_black_plaid_wool,_c_1950.jpg) | Photographer for the Rhode Island School of Design Museum of Art | CC0 |
+| l33 | [Colorful Zara Sweater.jpg](https://commons.wikimedia.org/wiki/File:Colorful_Zara_Sweater.jpg) | Kauey | CC BY-SA 4.0 |
+| l34 | [Dr. Martens boots with a flower patern (ivesabM74).jpg](https://commons.wikimedia.org/wiki/File:Dr._Martens_boots_with_a_flower_patern_(ivesabM74).jpg) | Paul Dufour bill_bokeh | CC0 |
+| l35 | [Green Dr. Martens boots - Church Monkey Buckingham.jpeg](https://commons.wikimedia.org/wiki/File:Green_Dr._Martens_boots_-_Church_Monkey_Buckingham.jpeg) | Mishimishimishi | Public domain |
+| l36 | [Hoodie m7agar.jpg](https://commons.wikimedia.org/wiki/File:Hoodie_m7agar.jpg) | YoussefTahoun | CC0 |
+| l37 | [Leather jacket golden era.jpg](https://commons.wikimedia.org/wiki/File:Leather_jacket_golden_era.jpg) | kreativgarasch | CC0 |
+| l38 | [Momjeans.jpg](https://commons.wikimedia.org/wiki/File:Momjeans.jpg) | Sosostein | CC BY-SA 4.0 |
+| l39 | [Polo Bucket Hat.jpg](https://commons.wikimedia.org/wiki/File:Polo_Bucket_Hat.jpg) | Menswear Market | CC BY 2.0 |
+| l40 | [Polo Ralph Lauren down jacket with Aztec style print.jpg](https://commons.wikimedia.org/wiki/File:Polo_Ralph_Lauren_down_jacket_with_Aztec_style_print.jpg) | Menswear Market | CC BY 2.0 |
+| l41 | [Red Chuck.jpg](https://commons.wikimedia.org/wiki/File:Red_Chuck.jpg) | Ea schwenke20 | CC BY-SA 4.0 |
+| l42 | [Shirt dress.jpg](https://commons.wikimedia.org/wiki/File:Shirt_dress.jpg) | Bestvintage | Public domain |
+| l43 | [Tent dress.jpg](https://commons.wikimedia.org/wiki/File:Tent_dress.jpg) | Bestvintage | Public domain |

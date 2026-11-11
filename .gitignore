@@ -45,3 +45,5 @@ example
 
 .claude
 .vscode
+# Python
+__pycache__/

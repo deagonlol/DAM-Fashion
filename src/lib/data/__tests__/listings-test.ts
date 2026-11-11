@@ -157,3 +157,28 @@ describe('managing listings', () => {
     expect(toggleDate(once, '2026-10-25')).toEqual(['2026-10-20']);
   });
 });
+
+describe('rent / buy filter', () => {
+  const rentOnly = listing({ id: 'rent' });
+  const both = listing({ id: 'both', salePrice: 40 });
+  const sellOnly = listing({ id: 'sell', rentable: false, pricePerDay: 0, salePrice: 30 });
+  const sold = listing({ id: 'sold', salePrice: 40, soldAt: '2026-11-01T00:00:00Z' });
+  const items = [rentOnly, both, sellOnly, sold];
+  const ids = (f: ListingFilters) => items.filter((item) => matchesFilters(item, f)).map((item) => item.id);
+
+  it('shows everything by default', () => {
+    expect(ids(filters({}))).toEqual(['rent', 'both', 'sell', 'sold']);
+  });
+
+  it('Rent leaves out sell-only listings', () => {
+    expect(ids(filters({ deal: 'Rent' }))).toEqual(['rent', 'both', 'sold']);
+  });
+
+  it('Buy keeps only listings you can still buy', () => {
+    expect(ids(filters({ deal: 'Buy' }))).toEqual(['both', 'sell']);
+  });
+
+  it('a daily price limit leaves out sell-only listings', () => {
+    expect(ids(filters({ maxPrice: 100 }))).toEqual(['rent', 'both', 'sold']);
+  });
+});

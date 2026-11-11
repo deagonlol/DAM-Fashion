@@ -44,6 +44,7 @@ export type ListingRow = {
   pickup_spots?: string[];
   price_per_day: number | string;
   sale_price?: number | string | null;
+  rentable?: boolean | null;
   sold_at?: string | null;
   image_uris: string[];
   paused: boolean;
@@ -182,6 +183,7 @@ export function toListing(row: ListingRow): Listing {
     pickupSpots: (row.pickup_spots ?? []) as PickupSpot[],
     pricePerDay: Number(row.price_per_day),
     salePrice: row.sale_price == null ? undefined : Number(row.sale_price),
+    rentable: row.rentable !== false,
     soldAt: optional(row.sold_at ?? null),
     imageUris: row.image_uris,
     createdAt: row.created_at,

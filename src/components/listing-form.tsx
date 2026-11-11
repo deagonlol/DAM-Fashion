@@ -27,6 +27,10 @@ import {
   type Size,
 } from '@/lib/data/types';
 
+/** Rent only, rent or buy, or sell only. */
+const OFFERS = ['Rent', 'Rent or buy', 'Buy only'] as const;
+type Offer = (typeof OFFERS)[number];
+
 type ListingFormProps = {
   /** Pre-filled values when editing. */
   initial?: NewListing;
@@ -66,25 +70,24 @@ export function ListingForm({
   const [pickupSpots, setPickupSpots] = useState<PickupSpot[]>(initial?.pickupSpots ?? []);
   const [price, setPrice] = useState(initial ? String(initial.pricePerDay) : '');
   const [salePrice, setSalePrice] = useState(initial?.salePrice != null ? String(initial.salePrice) : '');
+  const [offer, setOffer] = useState<Offer>(
+    initial?.rentable === false ? 'Buy only' : initial?.salePrice != null ? 'Rent or buy' : 'Rent'
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const suggestion =
-    category && size && events.length > 0
-      ? suggestedDailyPrice(listings, { category, events, size, excludeId })
-      : null;
-  const pricePerDay = Number(price);
+    category && size && events.length > 0 ? suggestedDailyPrice(listings, { category, events, size, excludeId }) : null;
+  const rents = offer !== 'Buy only';
+  const sells = offer !== 'Rent';
+  // Sell-only listings store a daily price of 0; it's never shown.
+  const pricePerDay = rents ? Number(price) : 0;
   const saleText = salePrice.trim();
   const saleAmount = saleText === '' ? null : Number(saleText);
-  const saleOk = saleAmount === null || (Number.isFinite(saleAmount) && saleAmount > pricePerDay);
+  const priceOk = !rents || (Number.isFinite(pricePerDay) && pricePerDay > 0);
+  const saleOk = !sells || (saleAmount !== null && Number.isFinite(saleAmount) && saleAmount > pricePerDay);
   const isValid =
-    imageUris.length > 0 &&
-    title.trim().length > 0 &&
-    category !== null &&
-    size !== null &&
-    Number.isFinite(pricePerDay) &&
-    pricePerDay > 0 &&
-    saleOk;
+    imageUris.length > 0 && title.trim().length > 0 && category !== null && size !== null && priceOk && saleOk;
 
   const photosLeft = MAX_LISTING_PHOTOS - imageUris.length;
 
@@ -122,6 +125,7 @@ export function ListingForm({
     setPickupSpots([]);
     setPrice('');
     setSalePrice('');
+    setOffer('Rent');
   }
 
   async function handleSubmit() {
@@ -139,7 +143,8 @@ export function ListingForm({
         brand: brand.trim(),
         pickupSpots,
         pricePerDay,
-        salePrice: saleAmount ?? undefined,
+        salePrice: sells ? (saleAmount ?? undefined) : undefined,
+        rentable: rents,
       });
       if (resetOnSubmit) resetForm();
     } catch (e) {
@@ -152,9 +157,7 @@ export function ListingForm({
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.container} edges={safeAreaTop ? ['top'] : []}>
-        <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
@@ -253,34 +256,43 @@ export function ListingForm({
               </ThemedText>
             </Field>
 
-            <TextField
-              label="Price per day ($)"
-              value={price}
-              onChangeText={setPrice}
-              placeholder="5"
-              keyboardType="decimal-pad"
-            />
-            {suggestion !== null ? (
-              <Pressable
-                onPress={() => setPrice(String(suggestion))}
-                accessibilityRole="button"
-                hitSlop={8}>
+            <Field label="How can people get it?">
+              <ChipGroup variant="segment" options={OFFERS} value={offer} onChange={(next) => next && setOffer(next)} />
+            </Field>
+
+            {rents ? (
+              <TextField
+                label="Price per day ($)"
+                value={price}
+                onChangeText={setPrice}
+                placeholder="5"
+                keyboardType="decimal-pad"
+              />
+            ) : null}
+            {rents && suggestion !== null ? (
+              <Pressable onPress={() => setPrice(String(suggestion))} accessibilityRole="button" hitSlop={8}>
                 <ThemedText type="small" themeColor="textSecondary">
                   Similar listings are about {formatPrice(suggestion)}/day. Tap to use it.
                 </ThemedText>
               </Pressable>
             ) : null}
 
-            <TextField
-              label="Sale price ($, optional)"
-              value={salePrice}
-              onChangeText={setSalePrice}
-              placeholder="40"
-              keyboardType="decimal-pad"
-            />
-            <ThemedText type="small" themeColor={saleText !== '' && !saleOk ? 'danger' : 'textSecondary'}>
-              Leave blank to rent only. A sale price has to be higher than the daily rate.
-            </ThemedText>
+            {sells ? (
+              <>
+                <TextField
+                  label="Sale price ($)"
+                  value={salePrice}
+                  onChangeText={setSalePrice}
+                  placeholder="40"
+                  keyboardType="decimal-pad"
+                />
+                <ThemedText type="small" themeColor={saleText !== '' && !saleOk ? 'danger' : 'textSecondary'}>
+                  {rents
+                    ? 'What someone pays to keep it. Has to be higher than the daily rate.'
+                    : 'What someone pays to keep it. It won’t be offered for rent.'}
+                </ThemedText>
+              </>
+            ) : null}
 
             {error ? (
               <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">

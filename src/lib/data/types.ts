@@ -56,6 +56,8 @@ export type Listing = {
   pricePerDay: number;
   /** One-time buy price. Only set when the owner is willing to sell, and always above the daily rate. */
   salePrice?: number;
+  /** False for sell-only listings, which can be bought but never rented. Missing means rentable. */
+  rentable?: boolean;
   /** Set when a buy request is accepted. The item stays in the owner's closet, labeled sold. */
   soldAt?: string;
   /** Photos of the item from different angles. The first is the cover shown in lists. */
@@ -87,7 +89,12 @@ export type ListingFilters = {
   events: EventTag[];
   sizes: Size[];
   maxPrice: number | null;
+  /** Only listings you can rent, or only ones you can buy. Null means either. */
+  deal: Deal | null;
 };
+
+export const DEALS = ['Rent', 'Buy'] as const;
+export type Deal = (typeof DEALS)[number];
 
 /** A chat between a borrower and a listing's owner, about that listing. */
 export type Conversation = {
