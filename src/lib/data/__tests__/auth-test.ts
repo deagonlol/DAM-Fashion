@@ -70,7 +70,15 @@ afterEach(async () => {
 });
 
 describe('isUtexasEmail', () => {
-  it.each(['alex@utexas.edu', 'ALEX@UTEXAS.EDU', '  alex@utexas.edu  '])('accepts %s', (email) => {
+  it.each([
+    'alex@utexas.edu',
+    'ALEX@UTEXAS.EDU',
+    '  alex@utexas.edu  ',
+    'alex@my.utexas.edu',
+    'abc123@eid.utexas.edu',
+    'alex@cs.utexas.edu',
+    'alex@mail.cs.utexas.edu',
+  ])('accepts %s', (email) => {
     expect(isUtexasEmail(email)).toBe(true);
   });
 
@@ -78,7 +86,9 @@ describe('isUtexasEmail', () => {
     'alex@gmail.com',
     'alex@utexas.edu.evil.com',
     'alex@fakeutexas.edu',
-    'alex@cs.utexas.edu', // department subdomains aren't allowed yet
+    'alex@utexas.edu.com',
+    'alex@my_utexas.edu',
+    'alex@.utexas.edu',
     '@utexas.edu',
     'utexas.edu',
     '',

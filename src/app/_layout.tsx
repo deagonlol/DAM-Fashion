@@ -134,7 +134,19 @@ export default function RootLayout() {
                 name="admin/reports"
                 options={{ title: "Reports" }}
               />
+              <Stack.Screen name="shelf/[id]" options={{ title: "" }} />
+              <Stack.Screen
+                name="shelf/name"
+                options={{ title: "New shelf", presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="add-to-shelf/[listingId]"
+                options={{ title: "Add to shelf", presentation: "modal" }}
+              />
             </Stack.Protected>
+
+            {/* Readable whether or not someone is signed in. */}
+            <Stack.Screen name="legal/[doc]" options={{ title: "" }} />
 
             <Stack.Protected guard={!signedIn}>
               <Stack.Screen
@@ -146,6 +158,10 @@ export default function RootLayout() {
               <Stack.Screen
                 name="forgot-password"
                 options={{ title: "Reset password" }}
+              />
+              <Stack.Screen
+                name="confirm-email"
+                options={{ title: "Confirm email" }}
               />
             </Stack.Protected>
           </Stack>

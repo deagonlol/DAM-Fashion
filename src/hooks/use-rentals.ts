@@ -5,7 +5,8 @@ import { useNow } from '@/hooks/use-now';
 import { listingMentions } from '@/lib/data/listings';
 import { getRentalsSnapshot, isOverdue, ordersFor, subscribeToRentals } from '@/lib/data/rentals';
 import { canReview, getReviewsSnapshot, subscribeToReviews } from '@/lib/data/reviews';
-import type { Rental } from '@/lib/data/types';
+import { getSalesSnapshot, saleOrdersFor, subscribeToSales } from '@/lib/data/sales';
+import type { Rental, Sale } from '@/lib/data/types';
 import { getUsersSnapshot, subscribeToUsers } from '@/lib/data/users';
 
 export function useRentals() {
@@ -17,26 +18,43 @@ export function useRental(id: string | undefined) {
   return useMemo(() => rentals.find((rental) => rental.id === id), [rentals, id]);
 }
 
+/** One row on the Orders tab: a borrow, or a buy request. */
+export type OrderItem = { kind: 'rental'; rental: Rental } | { kind: 'sale'; sale: Sale };
+
 /**
- * The user's borrows on one side, split into `{ active, past }` for the Orders tab. A search
- * matches the item or the other person's name.
+ * The user's borrows and buy requests on one side of the Orders tab, split into
+ * `{ active, past, requests }`. Rentals come first in each list, then sales. A search matches
+ * the item or the other person's name.
  */
 export function useOrders(userId: string, role: 'borrower' | 'lender', query = '') {
   const rentals = useRentals();
+  const sales = useSyncExternalStore(subscribeToSales, getSalesSnapshot, getSalesSnapshot);
   const listings = useListings();
   const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot, getUsersSnapshot);
   return useMemo(() => {
     const q = query.trim().toLowerCase();
-    const matching = q
-      ? rentals.filter((rental) => {
-          const listing = listings.find((item) => item.id === rental.listingId);
-          const otherId = role === 'borrower' ? rental.lenderId : rental.borrowerId;
-          const other = users.find((user) => user.id === otherId);
-          return (listing && listingMentions(listing, q)) || other?.name.toLowerCase().includes(q);
-        })
-      : rentals;
-    return ordersFor(matching, userId, role);
-  }, [rentals, listings, users, userId, role, query]);
+    const matches = (listingId: string, otherId: string) => {
+      if (!q) return true;
+      const listing = listings.find((item) => item.id === listingId);
+      const other = users.find((user) => user.id === otherId);
+      return (listing && listingMentions(listing, q)) || !!other?.name.toLowerCase().includes(q);
+    };
+    const rentalLists = ordersFor(
+      rentals.filter((rental) => matches(rental.listingId, role === 'borrower' ? rental.lenderId : rental.borrowerId)),
+      userId,
+      role
+    );
+    const saleLists = saleOrdersFor(
+      sales.filter((sale) => matches(sale.listingId, role === 'borrower' ? sale.sellerId : sale.buyerId)),
+      userId,
+      role === 'borrower' ? 'buyer' : 'seller'
+    );
+    const merge = (list: 'active' | 'past' | 'requests'): OrderItem[] => [
+      ...rentalLists[list].map((rental) => ({ kind: 'rental' as const, rental })),
+      ...saleLists[list].map((sale) => ({ kind: 'sale' as const, sale })),
+    ];
+    return { active: merge('active'), past: merge('past'), requests: merge('requests') };
+  }, [rentals, sales, listings, users, userId, role, query]);
 }
 
 export type ActivityItem = {

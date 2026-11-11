@@ -1,46 +1,66 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChipGroup } from '@/components/chip-group';
-import { OrderCard } from '@/components/order-card';
+import { OrderCard, SaleOrderCard } from '@/components/order-card';
 import { ProfileButton } from '@/components/profile-button';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
-import { useOrders } from '@/hooks/use-rentals';
+import { useListing } from '@/hooks/use-listings';
+import { useOrders, type OrderItem } from '@/hooks/use-rentals';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
+import { useUser } from '@/hooks/use-users';
 
-const SIDES = ['Rent', 'Lend'] as const;
+const SIDES = ['Rent/Buy', 'Lend/Sell'] as const;
 type Side = (typeof SIDES)[number];
 
-const WHEN = ['Active', 'Past'] as const;
-type When = (typeof WHEN)[number];
+type Tab = 'active' | 'past' | 'requests';
 
-const EMPTY: Record<Side, Record<When, string>> = {
-  Rent: {
-    Active: 'Nothing borrowed right now. Find something on Home.',
-    Past: 'Items you’ve returned will show up here.',
+const TABS: Record<Side, { key: Tab; label: string }[]> = {
+  'Rent/Buy': [
+    { key: 'active', label: 'Active Rentals' },
+    { key: 'past', label: 'Past Rentals' },
+  ],
+  'Lend/Sell': [
+    { key: 'active', label: 'Active Lending' },
+    { key: 'past', label: 'Past Lending' },
+    { key: 'requests', label: 'Requests' },
+  ],
+};
+
+const EMPTY: Record<Side, Record<Tab, string>> = {
+  'Rent/Buy': {
+    active: 'Nothing borrowed or on the way right now. Find something on Home.',
+    past: 'Items you’ve returned or bought will show up here.',
+    requests: '',
   },
-  Lend: {
-    Active: 'No one is borrowing your items right now.',
-    Past: 'Items that came back to you will show up here.',
+  'Lend/Sell': {
+    active: 'No one is borrowing your items right now.',
+    past: 'Items that came back to you, or that you sold, will show up here.',
+    requests: 'No requests waiting. New borrow and buy requests show up here.',
   },
 };
 
-/** Your borrows: what you're renting and what you're lending, current or past. */
+const keyOf = (item: OrderItem) => (item.kind === 'rental' ? `r-${item.rental.id}` : `s-${item.sale.id}`);
+
+/** Your orders: what you're renting or buying, and what you're lending or selling. */
 export default function OrdersScreen() {
   const user = useCurrentUser();
   const theme = useTheme();
-  const [side, setSide] = useState<Side>('Rent');
-  const [when, setWhen] = useState<When>('Active');
+  const [side, setSide] = useState<Side>('Rent/Buy');
+  const [tab, setTab] = useState<Tab>('active');
   const [query, setQuery] = useState('');
-  const role = side === 'Rent' ? 'borrower' : 'lender';
+  const role = side === 'Rent/Buy' ? 'borrower' : 'lender';
   const orders = useOrders(user.id, role, query);
-  const items = when === 'Active' ? orders.active : orders.past;
+  // Unfiltered by search, so the banner counts everything waiting.
+  const waiting = useOrders(user.id, 'lender').requests;
+  // Requests only exist on the Lend/Sell side.
+  const shownTab: Tab = TABS[side].some((option) => option.key === tab) ? tab : 'active';
+  const items = orders[shownTab];
 
   return (
     <ThemedView style={styles.container}>
@@ -56,24 +76,29 @@ export default function OrdersScreen() {
             variant="search"
             value={query}
             onChangeText={setQuery}
-            placeholder={side === 'Rent' ? 'Search items or lenders…' : 'Search items or borrowers…'}
+            placeholder={side === 'Rent/Buy' ? 'Search items or lenders…' : 'Search items or renters…'}
             returnKeyType="search"
             clearButtonMode="while-editing"
             autoCorrect={false}
           />
           <ChipGroup variant="segment" options={SIDES} value={side} onChange={(next) => next && setSide(next)} />
-          <View style={[styles.tabs, { borderColor: theme.border }]}>
-            {WHEN.map((option) => {
-              const selected = option === when;
+          {side === 'Lend/Sell' && shownTab !== 'requests' && waiting.length > 0 ? (
+            <RequestBanner first={waiting[0]} count={waiting.length} onReview={() => setTab('requests')} />
+          ) : null}
+          <View style={[styles.tabs, { borderColor: theme.border }]} accessibilityRole="tablist">
+            {TABS[side].map((option) => {
+              const selected = option.key === shownTab;
+              const count = option.key === 'requests' ? waiting.length : 0;
               return (
                 <Pressable
-                  key={option}
-                  onPress={() => setWhen(option)}
+                  key={option.key}
+                  onPress={() => setTab(option.key)}
                   accessibilityRole="tab"
                   accessibilityState={{ selected }}
                   style={[styles.tab, selected && { borderColor: theme.accent }]}>
                   <ThemedText type={selected ? 'smallBold' : 'small'} themeColor={selected ? 'text' : 'textSecondary'}>
-                    {option} {side === 'Rent' ? 'Rentals' : 'Lends'}
+                    {option.label}
+                    {count > 0 ? ` (${count})` : ''}
                   </ThemedText>
                 </Pressable>
               );
@@ -82,24 +107,17 @@ export default function OrdersScreen() {
         </View>
         <FlatList
           data={items}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <OrderCard rental={item} role={role} />}
-          ListHeaderComponent={
-            side === 'Lend' ? (
-              <Pressable
-                onPress={() => router.push('/list')}
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.addListing, { borderColor: theme.border }, pressed && styles.pressed]}>
-                <ThemedText type="subtitle" themeColor="textSecondary">
-                  +
-                </ThemedText>
-                <ThemedText type="smallBold">Add new listing</ThemedText>
-              </Pressable>
-            ) : undefined
+          keyExtractor={keyOf}
+          renderItem={({ item }) =>
+            item.kind === 'rental' ? (
+              <OrderCard rental={item.rental} role={role} />
+            ) : (
+              <SaleOrderCard sale={item.sale} role={role} />
+            )
           }
           ListEmptyComponent={
             <ThemedText themeColor="textSecondary" style={styles.empty}>
-              {query.trim() ? 'No orders match your search.' : EMPTY[side][when]}
+              {query.trim() ? 'No orders match your search.' : EMPTY[side][shownTab]}
             </ThemedText>
           }
           contentContainerStyle={styles.list}
@@ -108,6 +126,44 @@ export default function OrdersScreen() {
         />
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+/** "1 request waiting · Ronit wants to borrow your Black Slip Dress", with a Review button. */
+function RequestBanner({ first, count, onReview }: { first: OrderItem; count: number; onReview: () => void }) {
+  const theme = useTheme();
+  const listingId = first.kind === 'rental' ? first.rental.listingId : first.sale.listingId;
+  const listing = useListing(listingId);
+  const asker = useUser(first.kind === 'rental' ? first.rental.borrowerId : first.sale.buyerId);
+  const want = first.kind === 'rental' ? 'wants to borrow' : 'wants to buy';
+  const title = `${count} request${count === 1 ? '' : 's'} waiting`;
+  const detail = `${asker?.name ?? 'Someone'} ${want} your ${listing?.title ?? 'item'}${count > 1 ? `, and ${count - 1} more` : ''}`;
+
+  return (
+    <Pressable
+      onPress={onReview}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${detail}. Review`}
+      style={({ pressed }) => [
+        styles.banner,
+        { borderColor: theme.accent, backgroundColor: theme.backgroundElement },
+        pressed && styles.pressed,
+      ]}>
+      <View style={[styles.bannerIcon, { backgroundColor: theme.accent }]}>
+        <ThemedText type="smallBold" themeColor="onAccent">
+          {count}
+        </ThemedText>
+      </View>
+      <View style={styles.bannerText}>
+        <ThemedText type="smallBold">{title}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+          {detail}
+        </ThemedText>
+      </View>
+      <ThemedText type="smallBold" themeColor="accent">
+        Review
+      </ThemedText>
+    </Pressable>
   );
 }
 
@@ -125,6 +181,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: Spacing.three,
+  },
+  bannerIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerText: {
+    flex: 1,
+  },
   tabs: {
     flexDirection: 'row',
     gap: Spacing.four,
@@ -140,16 +214,6 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     paddingBottom: Spacing.five,
     gap: Spacing.three,
-  },
-  addListing: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    paddingVertical: Spacing.four,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: 12,
   },
   pressed: {
     opacity: 0.7,

@@ -1,9 +1,12 @@
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { AuthForm } from '@/components/auth-form';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
-import { AuthError, MIN_PASSWORD_LENGTH, signUp } from '@/lib/data/auth';
+import { Spacing } from '@/constants/theme';
+import { AuthError, ConfirmEmailError, MIN_PASSWORD_LENGTH, signUp } from '@/lib/data/auth';
 
 export default function SignUpScreen() {
   const [name, setName] = useState('');
@@ -19,8 +22,13 @@ export default function SignUpScreen() {
       // On success the auth guard in the root layout switches to the app.
       await signUp({ name, email, password });
     } catch (e) {
-      setError(e instanceof AuthError ? e.message : 'Something went wrong. Try again.');
       setSubmitting(false);
+      // The account exists; the next step is the code from the confirmation email.
+      if (e instanceof ConfirmEmailError) {
+        router.push({ pathname: '/confirm-email', params: { email: email.trim(), sentAt: String(Date.now()) } });
+        return;
+      }
+      setError(e instanceof AuthError ? e.message : 'Something went wrong. Try again.');
     }
   }
 
@@ -31,9 +39,29 @@ export default function SignUpScreen() {
       canSubmit={name.trim().length > 0 && email.length > 0 && password.length > 0 && !submitting}
       onSubmit={handleSubmit}
       footer={
-        <ThemedText type="small" themeColor="textSecondary">
-          Only @utexas.edu emails can sign up for now.
-        </ThemedText>
+        <View style={styles.footer}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Use your UT email: utexas.edu, my.utexas.edu, eid.utexas.edu, and other UT addresses all work. By creating
+            an account, you agree to the{' '}
+            <Link href="/legal/terms">
+              <ThemedText type="smallBold" themeColor="accent">
+                Terms of Service
+              </ThemedText>
+            </Link>{' '}
+            and{' '}
+            <Link href="/legal/privacy">
+              <ThemedText type="smallBold" themeColor="accent">
+                Privacy Policy
+              </ThemedText>
+            </Link>
+            .{'\n\n'}Already have an account?{' '}
+            <Link href="/sign-in" replace>
+              <ThemedText type="smallBold" themeColor="accent">
+                Log in
+              </ThemedText>
+            </Link>
+          </ThemedText>
+        </View>
       }>
       <TextField
         label="Name"
@@ -68,3 +96,9 @@ export default function SignUpScreen() {
     </AuthForm>
   );
 }
+
+const styles = StyleSheet.create({
+  footer: {
+    gap: Spacing.three,
+  },
+});

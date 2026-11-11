@@ -19,7 +19,7 @@ export function BadgeRow({ userId }: { userId: string }) {
   );
 }
 
-/** The user's most meaningful badge beyond "UT verified", for compact rows. */
+/** The user's most meaningful badge beyond "UT email", for compact rows. */
 export function TopBadge({ userId }: { userId: string }) {
   const badges = useBadges(userId);
   const top = badges.find((badge) => badge !== 'verified_student');

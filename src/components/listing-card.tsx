@@ -25,7 +25,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <Image
           source={listing.imageUris[0]}
           style={[styles.image, { backgroundColor: theme.backgroundElement }]}
-          contentFit="cover"
+          contentFit="contain"
           transition={150}
         />
         <SaveButton listingId={listing.id} />
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    aspectRatio: 3 / 4,
+    aspectRatio: 1,
   },
   info: {
     paddingHorizontal: Spacing.two,

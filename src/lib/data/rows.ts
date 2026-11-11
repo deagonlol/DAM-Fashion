@@ -17,6 +17,7 @@ import type {
   Review,
   Sale,
   Save,
+  Shelf,
   Size,
   User,
 } from './types';
@@ -86,6 +87,9 @@ export type RentalRow = {
   condition_issue: string | null;
   no_show_reported_by: string | null;
   offered_price_per_day?: number | string | null;
+  /** "HH:MM:SS" from Postgres. */
+  pickup_time?: string | null;
+  return_time?: string | null;
 };
 
 export type RentalCodeRow = { rental_id: string; kind: 'pickup' | 'return'; code: string };
@@ -105,6 +109,10 @@ export type ReviewRow = {
 };
 
 export type SaveRow = { user_id: string; listing_id: string; created_at: string };
+
+export type ShelfRow = { id: string; owner_id: string; name: string; created_at: string };
+
+export type ShelfItemRow = { shelf_id: string; listing_id: string; created_at: string };
 
 export type ReportRow = {
   id: string;
@@ -226,6 +234,8 @@ export function toRental(row: RentalRow, codes: RentalCodeRow[] = []): Rental {
     endDate: row.end_date,
     // Hidden from people outside the borrow.
     pickupSpot: (row.pickup_spot ?? '') as PickupSpot,
+    pickupTime: row.pickup_time ? row.pickup_time.slice(0, 5) : undefined,
+    returnTime: row.return_time ? row.return_time.slice(0, 5) : undefined,
     offeredPricePerDay:
       row.offered_price_per_day == null ? undefined : Number(row.offered_price_per_day),
     status: row.status as RentalStatus,
@@ -260,6 +270,20 @@ export function toReview(row: ReviewRow): Review {
 
 export function toSave(row: SaveRow): Save {
   return { userId: row.user_id, listingId: row.listing_id, createdAt: row.created_at };
+}
+
+/** Builds shelves from their rows, each with its listings newest first. */
+export function toShelves(rows: ShelfRow[], items: ShelfItemRow[]): Shelf[] {
+  return rows.map((row) => ({
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    createdAt: row.created_at,
+    listingIds: items
+      .filter((item) => item.shelf_id === row.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map((item) => item.listing_id),
+  }));
 }
 
 export function toReport(row: ReportRow): Report {

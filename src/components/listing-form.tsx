@@ -174,7 +174,7 @@ export function ListingForm({
                       <Image
                         source={uri}
                         style={[StyleSheet.absoluteFill, { backgroundColor: theme.backgroundElement }]}
-                        contentFit="cover"
+                        contentFit="contain"
                       />
                     </Pressable>
                     {index === 0 ? (
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
   },
   photo: {
     width: 96,
-    aspectRatio: 3 / 4,
+    aspectRatio: 1,
     borderRadius: 10,
     overflow: 'hidden',
   },

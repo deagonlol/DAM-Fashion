@@ -22,6 +22,7 @@ import {
   toReview,
   toSale,
   toSave,
+  toShelves,
   toUpheldReport,
   toUser,
   unwrap,
@@ -36,16 +37,19 @@ import {
   type ReviewRow,
   type SaleRow,
   type SaveRow,
+  type ShelfItemRow,
+  type ShelfRow,
   type UpheldReportRow,
 } from './rows';
 import { setSaves } from './saves';
+import { setShelves } from './shelves';
 import { setUsers } from './users';
 
 let channel: RealtimeChannel | null = null;
 
 /** Loads all data for the signed-in user. `email` is theirs (other people's aren't public). */
 export async function loadAppData(userId: string, email: string) {
-  const [profiles, listings, rentals, sales, codes, conversations, messages, reviews, saves, saveCounts, reports, upheld, blocks] =
+  const [profiles, listings, rentals, sales, codes, conversations, messages, reviews, saves, saveCounts, reports, upheld, blocks, shelves, shelfItems] =
     await Promise.all([
       supabase.from('profiles').select().returns<ProfileRow[]>(),
       supabase.from('listings').select().returns<ListingRow[]>(),
@@ -60,6 +64,8 @@ export async function loadAppData(userId: string, email: string) {
       supabase.from('reports').select().returns<ReportRow[]>(),
       supabase.rpc('upheld_reports'),
       supabase.from('blocks').select().returns<BlockRow[]>(),
+      supabase.from('shelves').select().eq('owner_id', userId).returns<ShelfRow[]>(),
+      supabase.from('shelf_items').select().returns<ShelfItemRow[]>(),
     ]);
 
   setUsers(unwrap(profiles).map((row) => toUser(row, row.id === userId ? email : '')));
@@ -83,6 +89,7 @@ export async function loadAppData(userId: string, email: string) {
   const upheldRows: UpheldReportRow[] = unwrap(upheld);
   setReports([...fullReports, ...upheldRows.filter((row) => !fullIds.has(row.id)).map(toUpheldReport)]);
   setBlocks(unwrap(blocks).map(toBlock));
+  setShelves(toShelves(unwrap(shelves), unwrap(shelfItems)));
 }
 
 /** Streams new chats, messages, and borrow changes. Database policies limit it to the user's own. */
@@ -126,4 +133,5 @@ export function clearAppData() {
   setSaves([], {});
   setReports([]);
   setBlocks([]);
+  setShelves([]);
 }

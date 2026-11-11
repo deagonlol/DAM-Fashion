@@ -139,6 +139,9 @@ export type Rental = {
   startDate: string;
   endDate: string;
   pickupSpot: PickupSpot;
+  /** Austin-local "HH:MM" times to meet. Older borrows, and other people's, have none. */
+  pickupTime?: string;
+  returnTime?: string;
   /**
    * Daily price the borrower offered. Omitted for other people's borrows, which are loaded
    * only for dates and status. The listing price is used when this borrow has none.
@@ -208,6 +211,18 @@ export type Save = {
   listingId: string;
   createdAt: string;
 };
+
+/** A named group of listings in someone's closet, like a Pinterest board. Private to its owner. */
+export type Shelf = {
+  id: string;
+  ownerId: string;
+  name: string;
+  /** Newest first. */
+  listingIds: string[];
+  createdAt: string;
+};
+
+export const MAX_SHELF_NAME_LENGTH = 40;
 
 export const REPORT_REASONS = [
   'No-show',

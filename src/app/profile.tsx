@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -62,6 +62,21 @@ export default function ProfileScreen() {
         <View style={styles.row}>
           <Button title="Edit profile" variant="secondary" style={styles.flex} onPress={() => router.push('/edit-profile')} />
           <Button title="Sign out" variant="secondary" style={styles.flex} onPress={signOut} />
+        </View>
+        <View style={styles.legal}>
+          <Link href="/legal/terms">
+            <ThemedText type="small" themeColor="textSecondary">
+              Terms of Service
+            </ThemedText>
+          </Link>
+          <ThemedText type="small" themeColor="textSecondary">
+            ·
+          </ThemedText>
+          <Link href="/legal/privacy">
+            <ThemedText type="small" themeColor="textSecondary">
+              Privacy Policy
+            </ThemedText>
+          </Link>
         </View>
         {user.role === 'admin' ? (
           <Button title={`Review reports (${openReports} open)`} onPress={() => router.push('/admin/reports')} />
@@ -140,6 +155,11 @@ const styles = StyleSheet.create({
   },
   stack: {
     gap: Spacing.three,
+  },
+  legal: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.two,
   },
   row: {
     flexDirection: 'row',

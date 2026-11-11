@@ -6,7 +6,7 @@ import { AuthForm } from '@/components/auth-form';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import { AuthError, signIn } from '@/lib/data/auth';
+import { AuthError, ConfirmEmailError, signIn } from '@/lib/data/auth';
 
 const TEST_EMAIL = 'alex.damtest@utexas.edu';
 const TEST_PASSWORD = 'damfashion';
@@ -16,6 +16,8 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Set when the account exists but its email isn't confirmed, to link to the code screen.
+  const [unconfirmed, setUnconfirmed] = useState<string | null>(null);
 
   async function enter(nextEmail: string, nextPassword: string) {
     setError(null);
@@ -25,6 +27,7 @@ export default function SignInScreen() {
       await signIn(nextEmail, nextPassword);
     } catch (e) {
       setError(e instanceof AuthError ? e.message : 'Something went wrong. Try again.');
+      setUnconfirmed(e instanceof ConfirmEmailError ? nextEmail : null);
       setSubmitting(false);
     }
   }
@@ -40,11 +43,26 @@ export default function SignInScreen() {
       secondaryDisabled={submitting}
       footer={
         <View style={styles.footer}>
+          {unconfirmed ? (
+            <Link href={{ pathname: '/confirm-email', params: { email: unconfirmed } }}>
+              <ThemedText type="smallBold" themeColor="accent">
+                Enter your confirmation code
+              </ThemedText>
+            </Link>
+          ) : null}
           <Link href="/forgot-password">
             <ThemedText type="small" themeColor="accent">
               Forgot password?
             </ThemedText>
           </Link>
+          <ThemedText type="small" themeColor="textSecondary">
+            New to Lendr?{' '}
+            <Link href="/sign-up" replace>
+              <ThemedText type="smallBold" themeColor="accent">
+                Create an account
+              </ThemedText>
+            </Link>
+          </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             Test account: {TEST_EMAIL} / {TEST_PASSWORD}
           </ThemedText>

@@ -36,7 +36,7 @@ import {
 } from '@/lib/data/rentals';
 import { canReview, isReviewVisible, reviewDaysLeft } from '@/lib/data/reviews';
 import type { Rental, RentalStatus } from '@/lib/data/types';
-import { formatDay, formatPrice } from '@/lib/format';
+import { formatDay, formatPrice, formatTime } from '@/lib/format';
 
 const STEPS: { status: RentalStatus; label: string }[] = [
   { status: 'requested', label: 'Requested' },
@@ -133,8 +133,14 @@ export default function RentalScreen() {
           <Steps status={rental.status} />
 
           <Card>
-            <Detail label="Pick up" value={formatDay(rental.startDate)} />
-            <Detail label="Return by" value={formatDay(rental.endDate)} />
+            <Detail
+              label="Pick up"
+              value={`${formatDay(rental.startDate)}${rental.pickupTime ? `, ${formatTime(rental.pickupTime)}` : ''}`}
+            />
+            <Detail
+              label="Return by"
+              value={`${formatDay(rental.endDate)}${rental.returnTime ? `, ${formatTime(rental.returnTime)}` : ''}`}
+            />
             <Detail label="Where" value={rental.pickupSpot} />
             {total !== null ? <Detail label="Total" value={formatPrice(total)} /> : null}
             <Pressable

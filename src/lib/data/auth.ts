@@ -1,6 +1,7 @@
 /**
  * Sign-in with Supabase Auth. The session is saved on the device, so restoreSession() signs
- * people back in when the app opens. Only @utexas.edu emails can sign up; the database
+ * people back in when the app opens. Only UT emails (utexas.edu or a subdomain like
+ * my.utexas.edu) can sign up; the database
  * enforces that too (handle_new_user in supabase/migrations).
  */
 import type { User as AuthUser } from '@supabase/supabase-js';
@@ -15,23 +16,22 @@ import { clearAppData, loadAppData, startLiveUpdates } from './sync';
 import { MAX_BIO_LENGTH, type User } from './types';
 import { getUserSnapshot, putUser } from './users';
 
-export {
-  getCurrentUserId,
-  getLastSignedInUserSnapshot,
-  getSessionSnapshot,
-  subscribeToSession,
-} from './session';
+export { getCurrentUserId, getLastSignedInUserSnapshot, getSessionSnapshot, subscribeToSession } from './session';
 
 export const MIN_PASSWORD_LENGTH = 8;
 
 export class AuthError extends Error {}
 
+/** Signed up, but the email isn't confirmed yet. Screens send them to enter the emailed code. */
+export class ConfirmEmailError extends AuthError {}
+
 /** Only UT Austin emails can sign up, as a first step toward student verification. */
+/** utexas.edu or any UT subdomain: my.utexas.edu, eid.utexas.edu, cs.utexas.edu, ... */
 export function isUtexasEmail(email: string) {
-  return /^[^\s@]+@utexas\.edu$/i.test(email.trim());
+  return /^[^\s@]+@([a-z0-9-]+\.)*utexas\.edu$/i.test(email.trim());
 }
 
-export const UTEXAS_EMAIL_ERROR = 'Lendr is only for UT students. Use your @utexas.edu email.';
+export const UTEXAS_EMAIL_ERROR = 'Lendr is only for UT students. Use your UT email (ending in utexas.edu).';
 
 /** False until restoreSession() has checked for a saved session, so the app doesn't flash sign-in. */
 const authReadyStore = createStore(false);
@@ -88,11 +88,10 @@ export async function signIn(email: string, password: string): Promise<User> {
     password,
   });
   if (error) {
-    throw new AuthError(
-      error.code === 'email_not_confirmed'
-        ? 'Confirm your email first. Check your UT inbox for the link.'
-        : 'Incorrect email or password.'
-    );
+    if (error.code === 'email_not_confirmed') {
+      throw new ConfirmEmailError('Confirm your email first. Enter the code we emailed you.');
+    }
+    throw new AuthError('Incorrect email or password.');
   }
   return enterApp(data.user);
 }
@@ -118,9 +117,37 @@ export async function signUp(input: { name: string; email: string; password: str
   }
   // With email confirmation on (the Supabase default), there's no session until they click the link.
   if (!data.user || !data.session) {
-    throw new AuthError(`Almost done! We sent a link to ${email}. Confirm your email, then sign in.`);
+    throw new ConfirmEmailError(`Almost done! We sent a code to ${email}.`);
   }
   return enterApp(data.user);
+}
+
+/**
+ * Checks the code from the sign-up email and signs in. Supabase's "Confirm signup" email
+ * template must include {{ .Token }} so the code shows up in the email.
+ */
+export async function confirmSignUp(email: string, code: string): Promise<User> {
+  const address = email.trim().toLowerCase();
+  const token = code.trim();
+  let { data, error } = await supabase.auth.verifyOtp({ email: address, token, type: 'signup' });
+  // Newer Supabase projects issue sign-up codes as plain email codes.
+  if (error) ({ data, error } = await supabase.auth.verifyOtp({ email: address, token, type: 'email' }));
+  if (error || !data.user || !data.session) {
+    throw new AuthError('That code is wrong or expired. Send a new one.');
+  }
+  return enterApp(data.user);
+}
+
+/** Sends the sign-up confirmation code again. Supabase allows one per address per minute. */
+export async function resendConfirmation(email: string) {
+  const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() });
+  if (error) {
+    throw new AuthError(
+      error.code === 'over_email_send_rate_limit'
+        ? 'Too many emails sent. Wait a minute and try again.'
+        : 'Couldn’t send the email. Try again.'
+    );
+  }
 }
 
 /**
@@ -160,7 +187,9 @@ export async function resetPassword(input: { email: string; code: string; passwo
   const { error } = await supabase.auth.updateUser({ password: input.password });
   if (error) {
     throw new AuthError(
-      error.code === 'same_password' ? 'Pick a password different from your old one.' : 'Couldn’t save the password. Try again.'
+      error.code === 'same_password'
+        ? 'Pick a password different from your old one.'
+        : 'Couldn’t save the password. Try again.'
     );
   }
   return enterApp(authUser);

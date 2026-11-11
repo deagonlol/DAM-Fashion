@@ -29,6 +29,13 @@ export function formatDateRange(startDate: string, endDate: string) {
   return startDate === endDate ? short(startDate) : `${short(startDate)} – ${short(endDate)}`;
 }
 
+/** A 24-hour "HH:MM" time as e.g. "4:00 PM". */
+export function formatTime(time: string) {
+  const [hours, minutes] = time.split(':').map(Number);
+  const suffix = hours >= 12 ? 'PM' : 'AM';
+  return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}
+
 export function formatPrice(amount: number) {
   return `$${amount % 1 === 0 ? amount : amount.toFixed(2)}`;
 }

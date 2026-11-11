@@ -28,6 +28,23 @@ export function putSale(sale: Sale) {
   return sale;
 }
 
+/**
+ * The user's buy requests on one side, for the Orders tab, newest first. Buyers see open
+ * requests as active; sellers get them as requests to answer. Accepted sales are past.
+ * Declined and cancelled ones never happened, so they're left out.
+ */
+export function saleOrdersFor(sales: Sale[], userId: string, role: 'buyer' | 'seller') {
+  const mine = sales
+    .filter((sale) => (role === 'buyer' ? sale.buyerId : sale.sellerId) === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const open = mine.filter((sale) => sale.status === 'requested');
+  return {
+    active: role === 'buyer' ? open : [],
+    past: mine.filter((sale) => sale.status === 'accepted'),
+    requests: role === 'seller' ? open : [],
+  };
+}
+
 /** Throws a SaleError explaining why a buy request isn't allowed. */
 export function validateSaleRequest(sales: Sale[], listing: Listing, buyerId: string) {
   if (listing.ownerId === buyerId) {

@@ -3,6 +3,7 @@
  * and run first for instant feedback; the async functions at the bottom then call the database
  * function of the same name (supabase/migrations/*_app_functions.sql), which re-checks them.
  */
+import { formatTime } from '../format';
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './session';
 import { getListingSnapshot } from './listings';
@@ -120,9 +121,15 @@ export type BorrowRequest = {
   startDate: string;
   endDate: string;
   pickupSpot: PickupSpot;
+  /** "HH:MM", Austin time. */
+  pickupTime?: string;
+  returnTime?: string;
   /** Daily price the borrower is willing to pay. Must be at least the listed price. */
   offeredPricePerDay?: number;
 };
+
+/** Times a borrower can pick to meet, every hour from 9 AM to 9 PM. */
+export const MEETING_TIMES = Array.from({ length: 13 }, (_, i) => `${String(9 + i).padStart(2, '0')}:00`);
 
 /** Throws a RentalError explaining why a borrow request isn't allowed. */
 export function validateRequest(
@@ -152,6 +159,14 @@ export function validateRequest(
   }
   if (request.endDate < request.startDate) {
     throw new RentalError('The return date must be on or after the pickup date.');
+  }
+  if (
+    request.pickupTime &&
+    request.returnTime &&
+    request.startDate === request.endDate &&
+    request.returnTime <= request.pickupTime
+  ) {
+    throw new RentalError('For a one-day borrow, the return time has to be after the pickup time.');
   }
   if (rentalDays(request.startDate, request.endDate) > MAX_RENTAL_DAYS) {
     throw new RentalError(`Borrows can be at most ${MAX_RENTAL_DAYS} days.`);
@@ -301,18 +316,84 @@ const PAST_ORDER: RentalStatus[] = ['returned', 'no_show'];
 /**
  * The user's borrows on one side, for the Orders tab. Active ones (waiting, scheduled, or out)
  * come soonest first; past ones (returned or missed) newest first. Declined and cancelled
- * requests never happened, so they're left out.
+ * requests never happened, so they're left out. Lenders get requests waiting on their answer
+ * in their own list; borrowers see their own requests as active, since they're just waiting.
  */
 export function ordersFor(rentals: Rental[], userId: string, role: 'borrower' | 'lender') {
   const mine = rentals.filter((rental) => (role === 'borrower' ? rental.borrowerId : rental.lenderId) === userId);
+  const soonestFirst = (a: Rental, b: Rental) => a.startDate.localeCompare(b.startDate);
+  const active = mine.filter((rental) => ACTIVE_ORDER.includes(rental.status)).sort(soonestFirst);
   return {
-    active: mine
-      .filter((rental) => ACTIVE_ORDER.includes(rental.status))
-      .sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    active: role === 'lender' ? active.filter((rental) => rental.status !== 'requested') : active,
     past: mine
       .filter((rental) => PAST_ORDER.includes(rental.status))
       .sort((a, b) => b.endDate.localeCompare(a.endDate)),
+    requests: role === 'lender' ? active.filter((rental) => rental.status === 'requested') : [],
   };
+}
+
+/** The tracker steps on an order card. */
+export const ORDER_STEPS = ['Requested', 'Confirmed', 'Pickup', 'Return'] as const;
+
+export type OrderStage = {
+  /** Short status under the dates, e.g. "Awaiting pickup". */
+  status: string;
+  tone: 'accent' | 'danger' | 'muted';
+  /** The boxed line: what happens next, and when and where. Null once it's over. */
+  next: { label: string; text: string } | null;
+  /**
+   * The step the borrow is waiting on, as an index into ORDER_STEPS. Steps before it are
+   * done. ORDER_STEPS.length means every step is done; null means no tracker (it didn't happen).
+   */
+  step: number | null;
+};
+
+/** Everything an order card shows about where a borrow stands, from one side. */
+export function orderStage(rental: Rental, now: Date, role: 'borrower' | 'lender'): OrderStage {
+  const when = (date: string, time?: string) =>
+    `${capitalize(dayLabel(date, now))}${time ? `, ${formatTime(time)}` : ''} · ${rental.pickupSpot}`;
+  const pickup = { label: 'Pickup', text: when(rental.startDate, rental.pickupTime) };
+  switch (rental.status) {
+    case 'requested':
+      return {
+        status: role === 'lender' ? 'Needs your answer' : 'Waiting for the lender',
+        tone: role === 'lender' ? 'accent' : 'muted',
+        next: pickup,
+        step: 1,
+      };
+    case 'accepted':
+      return { status: 'Awaiting pickup', tone: 'accent', next: pickup, step: 2 };
+    case 'picked_up': {
+      const late = daysOverdue(rental, now);
+      return {
+        status: late > 0 ? (late === 1 ? 'Overdue by 1 day' : `Overdue by ${late} days`) : 'In use',
+        tone: late > 0 ? 'danger' : 'accent',
+        next: { label: 'Return', text: when(rental.endDate, rental.returnTime) },
+        step: 3,
+      };
+    }
+    case 'returned':
+      return {
+        status: rental.returnedLate ? 'Returned late' : 'Returned',
+        tone: 'muted',
+        next: null,
+        step: ORDER_STEPS.length,
+      };
+    case 'no_show':
+      return { status: 'Missed pickup', tone: 'muted', next: null, step: null };
+    default:
+      return { status: rental.status === 'declined' ? 'Declined' : 'Cancelled', tone: 'muted', next: null, step: null };
+  }
+}
+
+/**
+ * The handoff code this person holds right now, if any: the lender shows the pickup code, and
+ * the borrower shows the return code. Each side only ever loads its own.
+ */
+export function codeToShow(rental: Rental, role: 'borrower' | 'lender'): string | undefined {
+  if (rental.status === 'accepted' && role === 'lender') return rental.pickupCode;
+  if (rental.status === 'picked_up' && role === 'borrower') return rental.returnCode;
+  return undefined;
 }
 
 /** "today", "tomorrow", or a short date like "Fri, Oct 18". */
@@ -432,6 +513,8 @@ export async function requestBorrow(request: BorrowRequest & { message?: string 
     end_on: request.endDate,
     spot: request.pickupSpot,
     offer_per_day: offeredPricePerDay,
+    pickup_at: request.pickupTime ?? null,
+    return_at: request.returnTime ?? null,
   });
 
   const conversation = await getOrCreateConversation(listing.id);
@@ -439,7 +522,10 @@ export async function requestBorrow(request: BorrowRequest & { message?: string 
   const offerLabel = `$${offeredPricePerDay % 1 === 0 ? offeredPricePerDay : offeredPricePerDay.toFixed(2)}/day`;
   await sendMessage(
     conversation.id,
-    `Requested to borrow ${formatRange(rental.startDate, rental.endDate)}, pickup at ${rental.pickupSpot}, offering ${offerLabel}.` +
+    `Requested to borrow ${formatRange(rental.startDate, rental.endDate)}, pickup at ${rental.pickupSpot}` +
+      (rental.pickupTime ? ` at ${formatTime(rental.pickupTime)}` : '') +
+      (rental.returnTime ? `, return at ${formatTime(rental.returnTime)}` : '') +
+      `, offering ${offerLabel}.` +
       (note ? `\n\n${note}` : '')
   );
   return rental;

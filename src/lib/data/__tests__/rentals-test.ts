@@ -16,9 +16,12 @@ import {
   formatRemainingTime,
   isOverdue,
   lendCount,
+  orderStage,
   orderStatus,
   pickRange,
   ordersFor,
+  codeToShow,
+  MEETING_TIMES,
   rangesOverlap,
   rentalDays,
   RentalError,
@@ -268,7 +271,48 @@ describe('orders', () => {
     const result = ordersFor([later, out, waiting, oldReturn, newReturn, missed, declined, lentOut], 'me', 'borrower');
     expect(result.active).toEqual([out, later, waiting]);
     expect(result.past).toEqual([newReturn, missed, oldReturn]);
-    expect(ordersFor([lentOut, out], 'me', 'lender')).toEqual({ active: [lentOut], past: [] });
+    expect(ordersFor([lentOut, out], 'me', 'lender')).toEqual({ active: [lentOut], past: [], requests: [] });
+    expect(result.requests).toEqual([]);
+  });
+
+  it('gives lenders their incoming requests in a separate list', () => {
+    const asked = rental({ status: 'requested', borrowerId: 'other', lenderId: 'me' });
+    const lentOut = rental({ status: 'picked_up', borrowerId: 'other', lenderId: 'me' });
+    expect(ordersFor([asked, lentOut], 'me', 'lender')).toEqual({ active: [lentOut], past: [], requests: [asked] });
+  });
+
+  it('tracks each borrow through requested, confirmed, pickup, and return', () => {
+    const now = local('2026-10-20T10:00:00');
+    expect(orderStage(rental({ status: 'requested' }), now, 'borrower')).toMatchObject({ step: 1, tone: 'muted' });
+    expect(orderStage(rental({ status: 'requested' }), now, 'lender')).toMatchObject({
+      status: 'Needs your answer',
+      tone: 'accent',
+    });
+    expect(orderStage(rental({ status: 'accepted', startDate: '2026-10-20' }), now, 'borrower')).toEqual({
+      status: 'Awaiting pickup',
+      tone: 'accent',
+      next: { label: 'Pickup', text: 'Today · Texas Union' },
+      step: 2,
+    });
+    expect(orderStage(rental({ status: 'picked_up', endDate: '2026-10-21' }), now, 'lender')).toMatchObject({
+      status: 'In use',
+      next: { label: 'Return', text: 'Tomorrow · Texas Union' },
+      step: 3,
+    });
+    expect(orderStage(rental({ status: 'picked_up', endDate: '2026-10-17' }), now, 'borrower')).toMatchObject({
+      tone: 'danger',
+    });
+    expect(orderStage(rental({ status: 'returned' }), now, 'borrower')).toMatchObject({ step: 4, next: null });
+    expect(orderStage(rental({ status: 'no_show' }), now, 'borrower').step).toBeNull();
+  });
+
+  it('shows each side only the code it hands over', () => {
+    const accepted = rental({ status: 'accepted', pickupCode: '1234', returnCode: '5678' });
+    const out = rental({ status: 'picked_up', pickupCode: '1234', returnCode: '5678' });
+    expect(codeToShow(accepted, 'lender')).toBe('1234');
+    expect(codeToShow(accepted, 'borrower')).toBeUndefined();
+    expect(codeToShow(out, 'borrower')).toBe('5678');
+    expect(codeToShow(out, 'lender')).toBeUndefined();
   });
 
   it('describes where each borrow stands', () => {
@@ -487,5 +531,47 @@ describe('available on a day', () => {
     expect(isAvailableOn([out, waiting], item, '2026-10-21')).toBe(false);
     expect(isAvailableOn([out, waiting], item, '2026-10-25')).toBe(true);
     expect(isAvailableOn([], { ...item, blockedDates: ['2026-10-26'] }, '2026-10-26')).toBe(false);
+  });
+});
+
+describe('pickup times', () => {
+  const now = local('2026-10-20T10:00:00');
+
+  it('shows the time with the date and place', () => {
+    const accepted = rental({ status: 'accepted', startDate: '2026-10-21', pickupTime: '16:00' });
+    expect(orderStage(accepted, now, 'borrower').next).toEqual({
+      label: 'Pickup',
+      text: 'Tomorrow, 4:00 PM · Texas Union',
+    });
+    const out = rental({ status: 'picked_up', endDate: '2026-10-21', returnTime: '09:00' });
+    expect(orderStage(out, now, 'lender').next?.text).toBe('Tomorrow, 9:00 AM · Texas Union');
+  });
+
+  it('offers meeting times every hour from 9 AM to 9 PM', () => {
+    expect(MEETING_TIMES[0]).toBe('09:00');
+    expect(MEETING_TIMES.at(-1)).toBe('21:00');
+    expect(MEETING_TIMES).toHaveLength(13);
+  });
+});
+
+describe('validateRequest times', () => {
+  it('needs the return after the pickup on a one-day borrow', () => {
+    const item = listing('a', 'owner');
+    const oneDay = { listingId: 'a', startDate: '2026-10-25', endDate: '2026-10-25', pickupSpot: 'Texas Union' as const };
+    expect(() =>
+      validateRequest([], item, 'me', { ...oneDay, pickupTime: '16:00', returnTime: '12:00' }, '2026-10-20')
+    ).toThrow('return time has to be after');
+    expect(() =>
+      validateRequest([], item, 'me', { ...oneDay, pickupTime: '12:00', returnTime: '16:00' }, '2026-10-20')
+    ).not.toThrow();
+    expect(() =>
+      validateRequest(
+        [],
+        item,
+        'me',
+        { ...oneDay, endDate: '2026-10-26', pickupTime: '16:00', returnTime: '12:00' },
+        '2026-10-20'
+      )
+    ).not.toThrow();
   });
 });

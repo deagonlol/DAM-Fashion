@@ -19,6 +19,7 @@ import { useRentals } from '@/hooks/use-rentals';
 import { useSales } from '@/hooks/use-sales';
 import { useListingReviews } from '@/hooks/use-reviews';
 import { useCurrentUser } from '@/hooks/use-session';
+import { useShelves } from '@/hooks/use-shelves';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser, useUserStats } from '@/hooks/use-users';
 import { EMPTY_FILTERS, similarListings } from '@/lib/data/listings';
@@ -40,6 +41,8 @@ export default function ListingDetailScreen() {
   const reviews = useListingReviews(id);
   const browsable = useBrowseListings(EMPTY_FILTERS, 'Newest');
   const theme = useTheme();
+  const shelves = useShelves();
+  const onShelves = shelves.filter((shelf) => shelf.listingIds.includes(id)).length;
   const [error, setError] = useState<string | null>(null);
 
   // The viewer's own borrow of this item that's still in progress, if any.
@@ -175,6 +178,16 @@ export default function ListingDetailScreen() {
               {listing.soldAt ? ' · Sold' : ''}
             </ThemedText>
             <SaveButton listingId={listing.id} variant="inline" />
+            <Pressable
+              onPress={() => router.push(`/add-to-shelf/${listing.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={onShelves > 0 ? `On ${onShelves} of your shelves. Change shelves` : 'Add to shelf'}
+              hitSlop={8}
+              style={({ pressed }) => [styles.shelfButton, { borderColor: theme.border }, pressed && styles.pressed]}>
+              <ThemedText type="smallBold" style={{ color: onShelves > 0 ? theme.accent : theme.text }}>
+                {onShelves > 0 ? `On ${onShelves} shelf${onShelves === 1 ? '' : 'ves'}` : '+ Shelf'}
+              </ThemedText>
+            </Pressable>
           </View>
 
           {listing.description ? (
@@ -334,6 +347,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.two,
+  },
+  shelfButton: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one,
   },
   tag: {
     borderWidth: 1,

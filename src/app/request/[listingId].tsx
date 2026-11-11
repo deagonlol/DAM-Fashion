@@ -9,27 +9,31 @@ import { Button } from '@/components/button';
 import { ChipGroup } from '@/components/chip-group';
 import { RestrictionBanner } from '@/components/restriction-banner';
 import { TextField } from '@/components/text-field';
+import { TimePicker } from '@/components/time-picker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
+import { useNow } from '@/hooks/use-now';
 import { useRentals } from '@/hooks/use-rentals';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import {
   bookedDays,
   MAX_RENTAL_DAYS,
+  MEETING_TIMES,
   openOfferCount,
   pickRange,
   rangesOverlap,
   rentalDays,
   requestBorrow,
+  toDateString,
   type DateRange,
 } from '@/lib/data/rentals';
 import { PICKUP_SPOTS, type PickupSpot } from '@/lib/data/types';
-import { formatDay, formatPrice, formatPricePerDay } from '@/lib/format';
+import { formatDay, formatPrice, formatPricePerDay, formatTime } from '@/lib/format';
 
-/** Pick dates on the calendar and a pickup spot, then send a borrow request to the lender. */
+/** Pick dates on the calendar, a pickup spot and times, then send a borrow request to the lender. */
 export default function RequestBorrowScreen() {
   const { listingId } = useLocalSearchParams<{ listingId: string }>();
   const listing = useListing(listingId);
@@ -38,6 +42,9 @@ export default function RequestBorrowScreen() {
   const theme = useTheme();
   const [range, setRange] = useState<DateRange | null>(null);
   const [pickupSpot, setPickupSpot] = useState<PickupSpot | null>(null);
+  const [pickupTime, setPickupTime] = useState<string | null>(null);
+  const [returnTime, setReturnTime] = useState<string | null>(null);
+  const now = useNow();
   const [message, setMessage] = useState('');
   const [offer, setOffer] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +81,16 @@ export default function RequestBorrowScreen() {
   const offerOk = Number.isFinite(offeredPricePerDay) && listing !== undefined && offeredPricePerDay >= listing.pricePerDay;
   const competing =
     listing && startDate && endDate ? openOfferCount(rentals, listing.id, startDate, endDate, user.id) : 0;
-  const canSubmit = startDate !== null && endDate !== null && pickupSpot !== null && offerOk && !submitting;
+  // Times that have already passed today can't be picked.
+  const today = toDateString(now);
+  const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const pickupPast = (time: string) => startDate === today && time <= nowTime;
+  const sameDay = startDate !== null && startDate === endDate;
+  const returnTooEarly = (time: string) => sameDay && pickupTime !== null && time <= pickupTime;
+  const timesOk =
+    pickupTime !== null && returnTime !== null && !pickupPast(pickupTime) && !returnTooEarly(returnTime);
+  const canSubmit =
+    startDate !== null && endDate !== null && pickupSpot !== null && timesOk && offerOk && !submitting;
 
   async function handleSubmit() {
     if (!startDate || !endDate || !pickupSpot || !listing) return;
@@ -86,6 +102,8 @@ export default function RequestBorrowScreen() {
         startDate,
         endDate,
         pickupSpot,
+        pickupTime: pickupTime ?? undefined,
+        returnTime: returnTime ?? undefined,
         message,
         offeredPricePerDay,
       });
@@ -152,6 +170,32 @@ export default function RequestBorrowScreen() {
                 The lender meets at these spots.
               </ThemedText>
             ) : null}
+          </View>
+
+          <View style={styles.section}>
+            <TimePicker
+              label={startDate ? `Pickup time · ${formatDay(startDate)}` : 'Pickup time'}
+              times={MEETING_TIMES}
+              value={pickupTime}
+              onChange={setPickupTime}
+              isDisabled={pickupPast}
+            />
+            <TimePicker
+              label={endDate ? `Return time · ${formatDay(endDate)}` : 'Return time'}
+              times={MEETING_TIMES}
+              value={returnTime}
+              onChange={setReturnTime}
+              isDisabled={returnTooEarly}
+            />
+            {pickupTime && returnTime && returnTooEarly(returnTime) ? (
+              <ThemedText type="small" themeColor="danger">
+                For a one-day borrow, return after the {formatTime(pickupTime)} pickup.
+              </ThemedText>
+            ) : (
+              <ThemedText type="small" themeColor="textSecondary">
+                Austin time. You can change plans with the lender in chat.
+              </ThemedText>
+            )}
           </View>
 
           <TextField

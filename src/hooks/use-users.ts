@@ -77,7 +77,7 @@ export function useBadges(userId: string): BadgeId[] {
     () =>
       badgesFor({
         userId,
-        // Emails aren't public, but the database only lets @utexas.edu emails sign up.
+        // Emails aren't public, but the database only lets UT (utexas.edu) emails sign up.
         isVerifiedStudent: user !== undefined,
         rentals,
         reviews,

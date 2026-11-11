@@ -1,4 +1,4 @@
-import { assertCanAcceptSale, validateSaleRequest } from '../sales';
+import { assertCanAcceptSale, saleOrdersFor, validateSaleRequest } from '../sales';
 import type { Listing, Rental, Sale } from '../types';
 
 function listing(overrides: Partial<Listing> = {}): Listing {
@@ -60,5 +60,27 @@ describe('buy requests', () => {
     expect(() => assertCanAcceptSale([rental('picked_up')], sale(), 'alex')).toThrow('Finish the current borrow');
     expect(() => assertCanAcceptSale([rental('returned')], sale(), 'alex')).not.toThrow();
     expect(() => assertCanAcceptSale([], sale(), 'priya')).toThrow('Only the seller');
+  });
+});
+
+describe('saleOrdersFor', () => {
+  const open = sale({ id: 'open', status: 'requested', createdAt: '2026-11-02T00:00:00Z' });
+  const sold = sale({ id: 'sold', status: 'accepted', createdAt: '2026-11-01T00:00:00Z' });
+  const declined = sale({ id: 'no', status: 'declined' });
+
+  it('shows buyers their open requests as active and bought items as past', () => {
+    expect(saleOrdersFor([sold, open, declined], 'priya', 'buyer')).toEqual({
+      active: [open],
+      past: [sold],
+      requests: [],
+    });
+  });
+
+  it('gives sellers open requests to answer', () => {
+    expect(saleOrdersFor([sold, open, declined], 'alex', 'seller')).toEqual({
+      active: [],
+      past: [sold],
+      requests: [open],
+    });
   });
 });

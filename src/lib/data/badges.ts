@@ -10,7 +10,9 @@ import type { Rental, Review } from './types';
 export type BadgeId = 'verified_student' | 'trusted_lender' | 'on_time' | 'top_rated' | 'first_lend';
 
 export const BADGES: Record<BadgeId, { label: string; description: string; icon: string }> = {
-  verified_student: { label: 'UT verified', description: 'Signed up with a UT Austin email.', icon: '✓' },
+  // Sign-up doesn't confirm the email (UT's filter blocks our emails), so this says what we
+  // actually know: they signed up with a UT address. Call it verified once sign-up confirms it.
+  verified_student: { label: 'UT email', description: 'Signed up with a UT Austin email address.', icon: '✓' },
   trusted_lender: {
     label: 'Trusted lender',
     description: '5+ completed lends, rated 4.5★ or higher, no strikes.',
