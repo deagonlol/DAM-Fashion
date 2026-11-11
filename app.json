@@ -47,7 +47,7 @@
       "reactCompiler": true
     },
     "extra": {
-      "tinyclipUrl": "wkcn/TinyCLIP-ViT-40M-32-Text-19M-LAION400M"
+      "tinyclipUrl": "https://lendr-tinyclip.onrender.com"
     }
   }
 }
