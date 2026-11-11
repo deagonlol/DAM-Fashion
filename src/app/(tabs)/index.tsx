@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Chip } from '@/components/chip-group';
 import { ListingCard } from '@/components/listing-card';
 import { ProfileButton } from '@/components/profile-button';
-import { TextField } from '@/components/text-field';
+import { SearchBar, SearchBarButton } from '@/components/search-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, Spacing } from '@/constants/theme';
@@ -43,6 +43,13 @@ export default function HomeScreen() {
     setQuery('');
   }
 
+  /** Opens Search with the photo menu or the filter row already open, carrying anything typed. */
+  function openSearchWith(open: 'photo' | 'filters') {
+    const q = query.trim();
+    router.push({ pathname: '/search', params: q ? { q, open } : { open } });
+    setQuery('');
+  }
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -54,14 +61,27 @@ export default function HomeScreen() {
               </ThemedText>
               <ProfileButton />
             </View>
-            <TextField
-              variant="search"
+            <SearchBar
               value={query}
               onChangeText={setQuery}
               onSubmitEditing={search}
               placeholder="Search for outfits, clubs, or events…"
               returnKeyType="search"
               autoCorrect={false}
+              actions={
+                <>
+                  <SearchBarButton
+                    icon={{ ios: 'camera', android: 'photo_camera', web: 'photo_camera' }}
+                    accessibilityLabel="Search with a photo"
+                    onPress={() => openSearchWith('photo')}
+                  />
+                  <SearchBarButton
+                    icon={{ ios: 'slider.horizontal.3', android: 'tune', web: 'tune' }}
+                    accessibilityLabel="Filters"
+                    onPress={() => openSearchWith('filters')}
+                  />
+                </>
+              }
             />
           </View>
 

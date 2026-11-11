@@ -1,0 +1,8 @@
+# What the service runs on. No PyTorch: the model runs as ONNX (see export_onnx.py).
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+onnxruntime==1.31.1
+numpy==2.5.4
+pillow==13.0.0
+httpx==0.28.1
+supabase==2.34.1

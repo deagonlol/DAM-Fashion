@@ -1,0 +1,5 @@
+.env
+.venv/
+__pycache__/
+# Exported by export_onnx.py (the Docker build does this itself).
+model/

@@ -1,21 +1,31 @@
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { SymbolView } from 'expo-symbols';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Chip, ChipGroup, MultiChipGroup } from '@/components/chip-group';
 import { FilterPanel, FilterToggle } from '@/components/filter-dropdown';
 import { ListingGrid } from '@/components/listing-grid';
-import { TextField } from '@/components/text-field';
+import { SearchBar, SearchBarButton } from '@/components/search-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { UserRow } from '@/components/user-row';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useBrowseListings, useBrowsePeople } from '@/hooks/use-browse';
 import { useRentals } from '@/hooks/use-rentals';
 import { EMPTY_FILTERS } from '@/lib/data/listings';
 import { isAvailableOn, toDateString } from '@/lib/data/rentals';
-import { describeIntent, parseSearchQuery, type SearchIntent } from '@/lib/data/search';
+import {
+  findSimilarListings,
+  preparePhoto,
+  rankByMatches,
+  warmUpImageSearch,
+  type PhotoMatch,
+} from '@/lib/data/image-search';
+import { parseSearchQuery, type SearchIntent } from '@/lib/data/search';
 import {
   CATEGORIES,
   EVENTS,
@@ -24,7 +34,6 @@ import {
   type ListingFilters,
   type ListingSort,
 } from '@/lib/data/types';
-import { describePhoto } from '@/lib/data/vision-search';
 import { formatPrice } from '@/lib/format';
 
 const MODES = ['Items', 'People'] as const;
@@ -33,7 +42,8 @@ type Mode = (typeof MODES)[number];
 const PRICE_LIMITS = [5, 10, 20] as const;
 const PRICE_LABELS = PRICE_LIMITS.map((price) => `Up to $${price}/day`);
 
-type Panel = 'type' | 'event' | 'size' | 'price' | 'sort';
+/** 'photo' is the camera button's menu; the rest are filter dropdowns. */
+type Panel = 'type' | 'event' | 'size' | 'price' | 'sort' | 'photo';
 
 type Params = {
   /** A typed search from Home. */
@@ -43,6 +53,8 @@ type Params = {
   /** A clothing type chip from Home's Trending row. */
   category?: string;
   sort?: string;
+  /** Home's search bar buttons: open the photo menu or the filter row right away. */
+  open?: string;
 };
 
 /** The filters a search starts with, from whatever Home passed in. */
@@ -67,22 +79,35 @@ function initialFilters({ q, event, category }: Params): ListingFilters {
 /** Search results: the full listing grid with smart search, photo search, filters, and sort. */
 export default function SearchScreen() {
   const params = useLocalSearchParams<Params>();
+  const theme = useTheme();
   const [mode, setMode] = useState<Mode>('Items');
   const [filters, setFilters] = useState<ListingFilters>(() => initialFilters(params));
   const [sort, setSort] = useState<ListingSort>(
     () => SORT_OPTIONS.find((option) => option === params.sort) ?? 'For you'
   );
-  const [openPanel, setOpenPanel] = useState<Panel | null>(null);
+  const [openPanel, setOpenPanel] = useState<Panel | null>(() => (params.open === 'photo' ? 'photo' : null));
+  /** The Type/Event/Size/Price/Sort row, behind the filters button. Open when Home passed filters in. */
+  const [showFilters, setShowFilters] = useState(() =>
+    Boolean(params.event || params.category || params.sort || params.open === 'filters')
+  );
   const [photoMessage, setPhotoMessage] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  /** The photo being searched with and the listings that look like it, closest first. */
+  const [photoSearch, setPhotoSearch] = useState<{ uri: string; matches: PhotoMatch[] } | null>(null);
   const [availableToday, setAvailableToday] = useState(false);
   const rentals = useRentals();
   const matching = useBrowseListings(filters, sort);
   const results = useMemo(() => {
-    if (!availableToday) return matching;
+    const ranked = photoSearch ? rankByMatches(matching, photoSearch.matches) : matching;
+    if (!availableToday) return ranked;
     const today = toDateString(new Date());
-    return matching.filter((listing) => isAvailableOn(rentals, listing, today));
-  }, [matching, availableToday, rentals]);
+    return ranked.filter((listing) => isAvailableOn(rentals, listing, today));
+  }, [matching, photoSearch, availableToday, rentals]);
+
+  // Wake the photo search service now so it's ready when someone picks a photo.
+  useEffect(() => {
+    warmUpImageSearch();
+  }, []);
   const people = useBrowsePeople(filters.query);
 
   const filterCount =
@@ -97,6 +122,7 @@ export default function SearchScreen() {
 
   function applyIntent(intent: SearchIntent, query: string) {
     setPhotoMessage(null);
+    setPhotoSearch(null);
     setFilters({
       query,
       words: intent.words,
@@ -123,7 +149,8 @@ export default function SearchScreen() {
       filters.maxPrice !== null);
 
   async function searchByPhoto(source: 'library' | 'camera') {
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.4, base64: true };
+    setOpenPanel(null);
+    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.8 };
     if (source === 'camera') {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -137,15 +164,18 @@ export default function SearchScreen() {
         : await ImagePicker.launchImageLibraryAsync(options);
     if (result.canceled || !result.assets) return;
     const asset = result.assets[0];
-    if (!asset?.base64) {
+    if (!asset?.uri) {
       setPhotoMessage('Could not read that photo.');
       return;
     }
     setPhotoBusy(true);
     setPhotoMessage(null);
     try {
-      const intent = await describePhoto(asset.base64, asset.mimeType ?? 'image/jpeg');
-      applyIntent(intent, describeIntent(intent));
+      const matches = await findSimilarListings(await preparePhoto(asset.uri));
+      setOpenPanel(null);
+      // Typed words would hide visual matches whose titles don't mention them. Chips still narrow.
+      update({ query: '', words: [], interpreted: false });
+      setPhotoSearch({ uri: asset.uri, matches });
     } catch (e) {
       setPhotoMessage(e instanceof Error ? e.message : 'Photo search failed.');
     } finally {
@@ -196,6 +226,37 @@ export default function SearchScreen() {
             />
           </FilterPanel>
         );
+      case 'photo':
+        return (
+          <View style={[styles.photoMenu, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
+            <ThemedText type="smallBold">Search with a photo</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              We’ll find listings that look like it.
+            </ThemedText>
+            <Pressable
+              onPress={() => searchByPhoto('camera')}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.photoOption, pressed && styles.pressed]}>
+              <SymbolView
+                name={{ ios: 'camera', android: 'photo_camera', web: 'photo_camera' }}
+                tintColor={theme.accent}
+                size={20}
+              />
+              <ThemedText>Take a photo</ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={() => searchByPhoto('library')}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.photoOption, pressed && styles.pressed]}>
+              <SymbolView
+                name={{ ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' }}
+                tintColor={theme.accent}
+                size={20}
+              />
+              <ThemedText>Choose from library</ThemedText>
+            </Pressable>
+          </View>
+        );
       case 'sort':
         return (
           <FilterPanel onClear={() => setSort('For you')} onDone={() => setOpenPanel(null)}>
@@ -213,42 +274,62 @@ export default function SearchScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <ChipGroup options={MODES} value={mode} onChange={(next) => next && setMode(next)} />
-          <TextField
-            variant="search"
+          <SearchBar
             value={filters.query}
             onChangeText={(query) => (mode === 'Items' ? applyIntent(parseSearchQuery(query), query) : update({ query }))}
             placeholder={mode === 'Items' ? 'Try “black formal dress under $15”' : 'Search people by name'}
             returnKeyType="search"
             clearButtonMode="while-editing"
             autoCorrect={false}
-            autoFocus={!params.q && !params.event && !params.category && !params.sort}
+            autoFocus={!params.q && !params.event && !params.category && !params.sort && !params.open}
+            actions={
+              mode === 'Items' ? (
+                <>
+                  <SearchBarButton
+                    icon={{ ios: 'camera', android: 'photo_camera', web: 'photo_camera' }}
+                    accessibilityLabel="Search with a photo"
+                    active={openPanel === 'photo'}
+                    busy={photoBusy}
+                    onPress={() => toggle('photo')}
+                  />
+                  <SearchBarButton
+                    icon={{ ios: 'slider.horizontal.3', android: 'tune', web: 'tune' }}
+                    accessibilityLabel={filterCount > 0 ? `Filters, ${filterCount} on` : 'Filters'}
+                    active={showFilters}
+                    onPress={() => {
+                      setShowFilters((shown) => !shown);
+                      if (openPanel !== 'photo') setOpenPanel(null);
+                    }}
+                  />
+                </>
+              ) : null
+            }
           />
-          {mode === 'Items' ? (
-            photoBusy ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Reading photo…
-              </ThemedText>
-            ) : (
-              <View style={styles.photoActions}>
-                <Pressable onPress={() => searchByPhoto('camera')} accessibilityRole="button" hitSlop={8}>
-                  <ThemedText type="small" themeColor="accent">
-                    Take a photo
-                  </ThemedText>
-                </Pressable>
-                <Pressable onPress={() => searchByPhoto('library')} accessibilityRole="button" hitSlop={8}>
-                  <ThemedText type="small" themeColor="accent">
-                    Search by photo
-                  </ThemedText>
-                </Pressable>
-              </View>
-            )
+          {mode === 'Items' && photoBusy ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Finding similar items…
+            </ThemedText>
           ) : null}
+          {mode === 'Items' && openPanel === 'photo' ? renderPanel() : null}
           {photoMessage ? (
             <ThemedText type="small" themeColor="danger">
               {photoMessage}
             </ThemedText>
           ) : null}
-          {mode === 'Items' && showUnderstood ? (
+          {mode === 'Items' && photoSearch ? (
+            <View style={styles.photoSearch}>
+              <Image source={{ uri: photoSearch.uri }} style={styles.photoThumb} contentFit="cover" />
+              <ThemedText type="small" themeColor="textSecondary" style={styles.photoLabel}>
+                Similar to your photo
+              </ThemedText>
+              <Pressable onPress={() => setPhotoSearch(null)} accessibilityRole="button" hitSlop={8}>
+                <ThemedText type="small" themeColor="accent">
+                  Clear
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+          {mode === 'Items' && !photoSearch && showUnderstood ? (
             <ThemedText type="small" themeColor="textSecondary">
               Looking for {understood.join(' · ')}
             </ThemedText>
@@ -277,51 +358,54 @@ export default function SearchScreen() {
                   onPress={() => toggle('event')}
                 />
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-                <FilterToggle
-                  label="Type"
-                  count={filters.categories.length}
-                  open={openPanel === 'type'}
-                  onPress={() => toggle('type')}
-                />
-                <FilterToggle
-                  label="Event"
-                  count={filters.events.length}
-                  open={openPanel === 'event'}
-                  onPress={() => toggle('event')}
-                />
-                <FilterToggle
-                  label="Size"
-                  count={filters.sizes.length}
-                  open={openPanel === 'size'}
-                  onPress={() => toggle('size')}
-                />
-                <FilterToggle
-                  label={priceLabel ?? 'Price'}
-                  count={0}
-                  open={openPanel === 'price'}
-                  onPress={() => toggle('price')}
-                />
-                <FilterToggle
-                  label={`Sort: ${sort}`}
-                  count={0}
-                  open={openPanel === 'sort'}
-                  onPress={() => toggle('sort')}
-                />
-              </ScrollView>
-              {renderPanel()}
+              {showFilters ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                  <FilterToggle
+                    label="Type"
+                    count={filters.categories.length}
+                    open={openPanel === 'type'}
+                    onPress={() => toggle('type')}
+                  />
+                  <FilterToggle
+                    label="Event"
+                    count={filters.events.length}
+                    open={openPanel === 'event'}
+                    onPress={() => toggle('event')}
+                  />
+                  <FilterToggle
+                    label="Size"
+                    count={filters.sizes.length}
+                    open={openPanel === 'size'}
+                    onPress={() => toggle('size')}
+                  />
+                  <FilterToggle
+                    label={priceLabel ?? 'Price'}
+                    count={0}
+                    open={openPanel === 'price'}
+                    onPress={() => toggle('price')}
+                  />
+                  <FilterToggle
+                    label={`Sort: ${sort}`}
+                    count={0}
+                    open={openPanel === 'sort'}
+                    onPress={() => toggle('sort')}
+                  />
+                </ScrollView>
+              ) : null}
+              {openPanel !== 'photo' ? renderPanel() : null}
             </>
           ) : null}
           <View style={styles.summary}>
             <ThemedText type="small" themeColor="textSecondary">
               {countLabel}
             </ThemedText>
-            {mode === 'Items' && (filterCount > 0 || availableToday) ? (
+            {mode === 'Items' && (filterCount > 0 || availableToday || photoSearch) ? (
               <Pressable
                 onPress={() => {
                   setFilters(EMPTY_FILTERS);
                   setAvailableToday(false);
                   setPhotoMessage(null);
+                  setPhotoSearch(null);
                 }}
                 accessibilityRole="button"
                 hitSlop={8}>
@@ -334,7 +418,10 @@ export default function SearchScreen() {
         </View>
 
         {mode === 'Items' ? (
-          <ListingGrid listings={results} emptyText="No items match your search." />
+          <ListingGrid
+            listings={results}
+            emptyText={photoSearch ? 'No similar items found.' : 'No items match your search.'}
+          />
         ) : (
           <FlatList
             data={people}
@@ -371,9 +458,33 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: Spacing.two,
   },
-  photoActions: {
+  photoMenu: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  photoOption: {
     flexDirection: 'row',
-    gap: Spacing.four,
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+  photoSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  photoThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+  },
+  photoLabel: {
+    flex: 1,
   },
   summary: {
     flexDirection: 'row',

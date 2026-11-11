@@ -1,6 +1,6 @@
 /**
- * One description of what someone is looking for. For you, a typed sentence, and a photo
- * all fill this, then the same ranking orders the feed.
+ * One description of what someone is looking for. For you and a typed sentence both fill
+ * this, then the same ranking orders the feed. (Photo search ranks by look instead: image-search.ts.)
  */
 import type { Category, EventTag, Listing, Size } from './types';
 import { CATEGORIES, EVENTS, SIZES } from './types';
@@ -150,12 +150,6 @@ export function parseSearchQuery(query: string): SearchIntent {
     .filter((word) => word.length > 1 && !STOP_WORDS.has(word) && !word.startsWith('$'));
 
   return { categories, events, sizes, maxPrice, words };
-}
-
-/** A short label for the search box after a photo is understood. */
-export function describeIntent(intent: SearchIntent) {
-  const price = intent.maxPrice !== null ? `under ${intent.maxPrice}` : null;
-  return [...intent.events, ...intent.categories, ...intent.sizes, price, ...intent.words].filter(Boolean).join(' ');
 }
 
 /** Events and types from listings the viewer owns or has borrowed. */

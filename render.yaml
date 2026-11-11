@@ -1,0 +1,18 @@
+# Render Blueprint: the TinyCLIP photo search service (tinyclip-space/). Free instance, 512 MB.
+# Secrets are entered in the Render dashboard when the Blueprint is created (sync: false).
+services:
+  - type: web
+    name: lendr-tinyclip
+    runtime: docker
+    plan: free
+    rootDir: tinyclip-space
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: INDEX_SECRET
+        sync: false
