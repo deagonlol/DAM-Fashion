@@ -1,7 +1,9 @@
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useMemo, useState } from 'react';
+import { SymbolView } from 'expo-symbols';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,11 +12,13 @@ import { ThemedView } from '@/components/themed-view';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useConversation, useMessages } from '@/hooks/use-conversations';
 import { useListing } from '@/hooks/use-listings';
+import { usePrivatePhotoUrls } from '@/hooks/use-private-photos';
 import { useBlockState } from '@/hooks/use-moderation';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser } from '@/hooks/use-users';
 import { sendMessage } from '@/lib/data/messages';
+import { markConversationRead } from '@/lib/data/reads';
 import { unblockUser } from '@/lib/data/moderation';
 import type { Message } from '@/lib/data/types';
 import { formatMessageTime, formatPricePerDay } from '@/lib/format';
@@ -31,6 +35,13 @@ export default function ChatScreen() {
   const theme = useTheme();
   const [text, setText] = useState(draft ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [sendingPhoto, setSendingPhoto] = useState(false);
+
+  // Reading the chat clears its unread dot, including messages that arrive while it's open.
+  const isMember = conversation?.participantIds.includes(currentUser.id) ?? false;
+  useEffect(() => {
+    if (isMember && id) void markConversationRead(id).catch(() => {});
+  }, [isMember, id, messages.length]);
 
   // Newest first, for the inverted list that keeps the latest message at the bottom.
   const newestFirst = useMemo(() => [...messages].reverse(), [messages]);
@@ -47,6 +58,25 @@ export default function ChatScreen() {
   // The team can open a chat from a report to read it, but not post in it.
   const isParticipant = conversation.participantIds.includes(currentUser.id);
   const otherFirstName = otherUser?.name.split(' ')[0] ?? 'them';
+
+  async function sendPhoto() {
+    if (!conversation || sendingPhoto) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+    if (result.canceled) return;
+    // Any typed text goes along as the caption.
+    const caption = text;
+    setText('');
+    setError(null);
+    setSendingPhoto(true);
+    try {
+      await sendMessage(conversation.id, caption, result.assets[0].uri);
+    } catch (e) {
+      setText(caption);
+      setError(e instanceof Error ? e.message : 'Photo not sent.');
+    } finally {
+      setSendingPhoto(false);
+    }
+  }
 
   async function handleSend() {
     if (!canSend || !conversation) return;
@@ -182,6 +212,23 @@ export default function ChatScreen() {
               </ThemedText>
             ) : null}
             <View style={styles.composer}>
+              <Pressable
+                onPress={sendPhoto}
+                disabled={sendingPhoto}
+                accessibilityRole="button"
+                accessibilityLabel={sendingPhoto ? 'Sending photo' : 'Send a photo'}
+                hitSlop={6}
+                style={[
+                  styles.photoButton,
+                  { backgroundColor: theme.backgroundElement },
+                  sendingPhoto && styles.dimmed,
+                ]}>
+                <SymbolView
+                  name={{ ios: 'photo', android: 'photo_library', web: 'photo_library' }}
+                  tintColor={theme.text}
+                  size={20}
+                />
+              </Pressable>
               <TextInput
                 value={text}
                 onChangeText={setText}
@@ -209,6 +256,7 @@ export default function ChatScreen() {
 /** Long-press someone else's message to report it. */
 function MessageBubble({ message, isMine, onReport }: { message: Message; isMine: boolean; onReport?: () => void }) {
   const theme = useTheme();
+  const [photoUrl] = usePrivatePhotoUrls('chat-photos', message.imagePath ? [message.imagePath] : []);
 
   return (
     <View style={[styles.messageRow, isMine ? styles.mine : styles.theirs]}>
@@ -222,7 +270,16 @@ function MessageBubble({ message, isMine, onReport }: { message: Message; isMine
             ? [styles.mineBubble, { backgroundColor: theme.accent }]
             : [styles.theirsBubble, { backgroundColor: theme.backgroundElement }],
         ]}>
-        <ThemedText style={isMine && { color: theme.onAccent }}>{message.text}</ThemedText>
+        {message.imagePath ? (
+          <Image
+            source={photoUrl ?? undefined}
+            style={[styles.photo, { backgroundColor: theme.background }]}
+            contentFit="cover"
+            transition={150}
+            accessibilityLabel="Photo"
+          />
+        ) : null}
+        {message.text ? <ThemedText style={isMine && { color: theme.onAccent }}>{message.text}</ThemedText> : null}
       </Pressable>
       <ThemedText type="small" themeColor="textSecondary" style={styles.time}>
         {formatMessageTime(message.createdAt)}
@@ -284,6 +341,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: 20,
+  },
+  photo: {
+    width: 220,
+    aspectRatio: 1,
+    borderRadius: 14,
+    marginVertical: Spacing.one,
+  },
+  photoButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   // A squared-off corner on the speaker's side, like a speech bubble's tail.
   mineBubble: {

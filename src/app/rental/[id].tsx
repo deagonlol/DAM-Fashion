@@ -5,6 +5,8 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { ConditionPhotos } from '@/components/condition-photos';
+import { ProposalCard } from '@/components/proposal-card';
 import { STATUS_LABELS } from '@/components/rental-row';
 import { ReviewCard } from '@/components/review-card';
 import { TextField } from '@/components/text-field';
@@ -13,12 +15,14 @@ import { ThemedView } from '@/components/themed-view';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
 import { useNow } from '@/hooks/use-now';
+import { useOpenProposal } from '@/hooks/use-proposals';
 import { useRental } from '@/hooks/use-rentals';
 import { useAllReviews, useRentalReviews } from '@/hooks/use-reviews';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser } from '@/hooks/use-users';
 import { getOrCreateConversation } from '@/lib/data/messages';
+import { termsOf } from '@/lib/data/proposals';
 import {
   acceptRequest,
   cancelBorrow,
@@ -27,12 +31,14 @@ import {
   daysOverdue,
   declineRequest,
   formatRemainingTime,
+  isExpiredRequest,
   ISSUE_REPORT_WINDOW_HOURS,
   rentalDays,
   reportConditionIssue,
   reportMissedPickup,
   submitPickupCode,
   submitReturnCode,
+  toDateString,
 } from '@/lib/data/rentals';
 import { canReview, isReviewVisible, reviewDaysLeft } from '@/lib/data/reviews';
 import type { Rental, RentalStatus } from '@/lib/data/types';
@@ -57,6 +63,7 @@ export default function RentalScreen() {
   const other = useUser(role === 'borrower' ? rental?.lenderId : rental?.borrowerId);
   const allReviews = useAllReviews();
   const rentalReviews = useRentalReviews(rental?.id);
+  const proposal = useOpenProposal(rental?.id);
   const [code, setCode] = useState('');
   const [issue, setIssue] = useState('');
   const [showIssueForm, setShowIssueForm] = useState(false);
@@ -75,6 +82,7 @@ export default function RentalScreen() {
   const dailyPrice = rental.offeredPricePerDay ?? listing?.pricePerDay;
   const total = dailyPrice != null ? dailyPrice * rentalDays(rental.startDate, rental.endDate) : null;
   const late = daysOverdue(rental, now);
+  const expired = isExpiredRequest(rental, toDateString(now));
   const myReview = rentalReviews.find((review) => review.reviewerId === user.id);
   const visibleReviews = rentalReviews.filter((review) => isReviewVisible(review, allReviews, [rental], now));
 
@@ -155,24 +163,54 @@ export default function RentalScreen() {
             </Pressable>
           </Card>
 
+          {proposal && listing ? (
+            <ProposalCard
+              rental={rental}
+              proposal={proposal}
+              current={termsOf(rental, listing.pricePerDay)}
+              userId={user.id}
+              otherName={firstName}
+            />
+          ) : null}
+
           {/* ---- What happens next, by status and role ---- */}
 
           {rental.status === 'requested' && role === 'lender' ? (
             <Card>
               <ThemedText>
-                {firstName} wants to borrow this
-                {dailyPrice != null ? ` for ${formatPrice(dailyPrice)}/day` : ''}. Accept to lock in the dates.
+                {expired
+                  ? `This request expired: the pickup day passed. Send ${firstName} a counter-offer with new dates, or decline it.`
+                  : `${firstName} wants to borrow this${dailyPrice != null ? ` for ${formatPrice(dailyPrice)}/day` : ''}. Accept to lock in the dates.`}
               </ThemedText>
               <View style={styles.row}>
-                <Button title="Decline" variant="secondary" style={styles.flex} onPress={() => run(() => declineRequest(rental.id))} />
-                <Button title="Accept" style={styles.flex} onPress={() => run(() => acceptRequest(rental.id))} />
+                <Button
+                  title="Decline"
+                  variant="secondary"
+                  style={styles.flex}
+                  onPress={() => run(() => declineRequest(rental.id))}
+                />
+                {!expired ? (
+                  <Button title="Accept" style={styles.flex} onPress={() => run(() => acceptRequest(rental.id))} />
+                ) : null}
               </View>
+              {!proposal ? (
+                <Button title="Counter-offer" variant="outline" onPress={() => router.push(`/propose/${rental.id}`)} />
+              ) : null}
             </Card>
           ) : null}
 
           {rental.status === 'requested' && role === 'borrower' ? (
             <Card>
-              <ThemedText>Waiting for {firstName} to respond.</ThemedText>
+              <ThemedText>
+                {proposal
+                  ? `${firstName} sent a counter-offer above.`
+                  : expired
+                    ? 'Your request expired: the pickup day passed. Pick new dates to send it again.'
+                    : `Waiting for ${firstName} to respond.`}
+              </ThemedText>
+              {!proposal ? (
+                <Button title="Edit request" variant="outline" onPress={() => router.push(`/propose/${rental.id}`)} />
+              ) : null}
               <Button title="Cancel request" variant="secondary" onPress={() => run(() => cancelBorrow(rental.id))} />
             </Card>
           ) : null}
@@ -186,15 +224,28 @@ export default function RentalScreen() {
                 </>
               ) : (
                 <>
-                  <ThemedText>
-                    At pickup, ask {firstName} for the code on their screen and enter it here.
-                  </ThemedText>
-                  <CodeEntry value={code} onChange={setCode} onSubmit={() => run(() => submitPickupCode(rental.id, code))} label="Confirm pickup" />
-                  <Button title="Cancel borrow" variant="secondary" onPress={() => run(() => cancelBorrow(rental.id))} />
+                  <ThemedText>At pickup, ask {firstName} for the code on their screen and enter it here.</ThemedText>
+                  <CodeEntry
+                    value={code}
+                    onChange={setCode}
+                    onSubmit={() => run(() => submitPickupCode(rental.id, code))}
+                    label="Confirm pickup"
+                  />
+                  <Button
+                    title="Cancel borrow"
+                    variant="secondary"
+                    onPress={() => run(() => cancelBorrow(rental.id))}
+                  />
                 </>
               )}
+              {!proposal ? (
+                <Button title="Change plans" variant="outline" onPress={() => router.push(`/propose/${rental.id}`)} />
+              ) : null}
               {canReportNoShow(rental, now) ? (
-                <Pressable onPress={() => run(() => reportMissedPickup(rental.id))} accessibilityRole="button" hitSlop={8}>
+                <Pressable
+                  onPress={() => run(() => reportMissedPickup(rental.id))}
+                  accessibilityRole="button"
+                  hitSlop={8}>
                   <ThemedText type="small" themeColor="danger">
                     {firstName} didn’t show up
                   </ThemedText>
@@ -225,7 +276,12 @@ export default function RentalScreen() {
               ) : (
                 <>
                   <ThemedText>When it comes back, enter the code on {firstName}’s screen.</ThemedText>
-                  <CodeEntry value={code} onChange={setCode} onSubmit={() => run(() => submitReturnCode(rental.id, code))} label="Confirm return" />
+                  <CodeEntry
+                    value={code}
+                    onChange={setCode}
+                    onSubmit={() => run(() => submitReturnCode(rental.id, code))}
+                    label="Confirm return"
+                  />
                 </>
               )}
             </Card>
@@ -267,8 +323,7 @@ export default function RentalScreen() {
               {canReview(rental, user.id, allReviews, now) ? (
                 <>
                   <ThemedText type="small" themeColor="textSecondary">
-                    {reviewDaysLeft(rental, now)} days left to review. Reviews stay hidden until you both
-                    review.
+                    {reviewDaysLeft(rental, now)} days left to review. Reviews stay hidden until you both review.
                   </ThemedText>
                   <Button title={`Review ${firstName}`} onPress={() => router.push(`/review/${rental.id}`)} />
                 </>
@@ -286,6 +341,8 @@ export default function RentalScreen() {
               <ThemedText>{endedMessage(rental, role, user.id, firstName)}</ThemedText>
             </Card>
           ) : null}
+
+          <ConditionPhotos rental={rental} userId={user.id} />
 
           {error ? (
             <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">

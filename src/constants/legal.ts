@@ -55,6 +55,7 @@ export const TERMS: LegalDoc = {
       heading: 'Moderation and account limits',
       body: [
         'The team may remove content, issue strikes, restrict, or ban accounts that break these terms or put others at risk.',
+        'Reports and appeals are first reviewed by an automated AI system, which can decide clear cases. Safety reports, anything that would ban an account, and unclear cases go to a person. You can appeal any strike, and a second appeal is always reviewed by a person.',
         'You can block anyone, and you can report users, listings, and individual messages.',
       ],
     },
@@ -108,6 +109,7 @@ export const PRIVACY: LegalDoc = {
         'Chats are visible only to the people in them, and to the moderation team when a message is reported.',
         'Your saved items and closet shelves are private to you. Other people only see how many people saved a listing, never who.',
         'Reports are visible to you and the moderation team, not to the person reported.',
+        'AI review: reports and appeals, including the related chat messages, borrow details, and photos, are sent to an AI service (currently Google Gemini’s free tier) to help decide them. The provider may use what it receives to improve its services under its own terms.',
       ],
     },
     {

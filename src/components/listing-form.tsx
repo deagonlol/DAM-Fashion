@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,12 +11,15 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useListings } from '@/hooks/use-listings';
+import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { suggestedDailyPrice } from '@/lib/data/search';
+import { clearListingDraft, isDraftEmpty, loadListingDraft, saveListingDraft } from '@/lib/drafts';
 import { formatPrice } from '@/lib/format';
 import {
   CATEGORIES,
   EVENTS,
+  MAX_FIT_DETAIL_LENGTH,
   MAX_LISTING_PHOTOS,
   PICKUP_SPOTS,
   SIZES,
@@ -67,6 +70,8 @@ export function ListingForm({
   const [events, setEvents] = useState<EventTag[]>(initial?.events ?? []);
   const [size, setSize] = useState<Size | null>(initial?.size ?? null);
   const [brand, setBrand] = useState(initial?.brand ?? '');
+  const [measurements, setMeasurements] = useState(initial?.measurements ?? '');
+  const [fitNote, setFitNote] = useState(initial?.fitNote ?? '');
   const [pickupSpots, setPickupSpots] = useState<PickupSpot[]>(initial?.pickupSpots ?? []);
   const [price, setPrice] = useState(initial ? String(initial.pricePerDay) : '');
   const [salePrice, setSalePrice] = useState(initial?.salePrice != null ? String(initial.salePrice) : '');
@@ -75,6 +80,79 @@ export function ListingForm({
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // New listings keep a draft on the device, so leaving the form doesn't lose it.
+  const user = useCurrentUser();
+  const draftsOn = !initial;
+  const [draftReady, setDraftReady] = useState(!draftsOn);
+  const [restoredDraft, setRestoredDraft] = useState(false);
+
+  useEffect(() => {
+    if (!draftsOn) return;
+    let cancelled = false;
+    void loadListingDraft(user.id).then((draft) => {
+      if (cancelled) return;
+      if (draft && !isDraftEmpty(draft)) {
+        setImageUris(draft.imageUris);
+        setTitle(draft.title);
+        setDescription(draft.description);
+        setCategory(CATEGORIES.find((option) => option === draft.category) ?? null);
+        setEvents(EVENTS.filter((option) => draft.events.includes(option)));
+        setSize(SIZES.find((option) => option === draft.size) ?? null);
+        setBrand(draft.brand);
+        setMeasurements(draft.measurements);
+        setFitNote(draft.fitNote);
+        setPickupSpots(PICKUP_SPOTS.filter((option) => draft.pickupSpots.includes(option)));
+        setPrice(draft.price);
+        setSalePrice(draft.salePrice);
+        setOffer(OFFERS.find((option) => option === draft.offer) ?? 'Rent');
+        setRestoredDraft(true);
+      }
+      setDraftReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftsOn, user.id]);
+
+  useEffect(() => {
+    if (!draftsOn || !draftReady) return;
+    const timer = setTimeout(() => {
+      void saveListingDraft(user.id, {
+        imageUris,
+        title,
+        description,
+        category,
+        events,
+        size,
+        brand,
+        measurements,
+        fitNote,
+        pickupSpots,
+        price,
+        salePrice,
+        offer,
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [
+    draftsOn,
+    draftReady,
+    user.id,
+    imageUris,
+    title,
+    description,
+    category,
+    events,
+    size,
+    brand,
+    measurements,
+    fitNote,
+    pickupSpots,
+    price,
+    salePrice,
+    offer,
+  ]);
 
   const suggestion =
     category && size && events.length > 0 ? suggestedDailyPrice(listings, { category, events, size, excludeId }) : null;
@@ -122,6 +200,8 @@ export function ListingForm({
     setEvents([]);
     setSize(null);
     setBrand('');
+    setMeasurements('');
+    setFitNote('');
     setPickupSpots([]);
     setPrice('');
     setSalePrice('');
@@ -141,11 +221,17 @@ export function ListingForm({
         events,
         size,
         brand: brand.trim(),
+        measurements: measurements.trim(),
+        fitNote: fitNote.trim(),
         pickupSpots,
         pricePerDay,
         salePrice: sells ? (saleAmount ?? undefined) : undefined,
         rentable: rents,
       });
+      if (draftsOn) {
+        void clearListingDraft(user.id);
+        setRestoredDraft(false);
+      }
       if (resetOnSubmit) resetForm();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
@@ -164,6 +250,25 @@ export function ListingForm({
             contentInsetAdjustmentBehavior="automatic">
             {heading ? <ThemedText type="subtitle">{heading}</ThemedText> : null}
             {banner}
+            {restoredDraft ? (
+              <View style={[styles.draftNotice, { backgroundColor: theme.backgroundElement }]}>
+                <ThemedText type="small" style={styles.flex}>
+                  Picked up your draft where you left off.
+                </ThemedText>
+                <Pressable
+                  onPress={() => {
+                    resetForm();
+                    setRestoredDraft(false);
+                    void clearListingDraft(user.id);
+                  }}
+                  accessibilityRole="button"
+                  hitSlop={8}>
+                  <ThemedText type="smallBold" themeColor="accent">
+                    Start over
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
 
             <Field label={`Photos (${imageUris.length}/${MAX_LISTING_PHOTOS})`}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
@@ -249,6 +354,21 @@ export function ListingForm({
               maxLength={40}
             />
 
+            <TextField
+              label="Measurements (optional)"
+              value={measurements}
+              onChangeText={setMeasurements}
+              placeholder="e.g. Waist 28 in, length 40 in"
+              maxLength={MAX_FIT_DETAIL_LENGTH}
+            />
+            <TextField
+              label="How it fits (optional)"
+              value={fitNote}
+              onChangeText={setFitNote}
+              placeholder="e.g. Runs small, fits like an XS"
+              maxLength={MAX_FIT_DETAIL_LENGTH}
+            />
+
             <Field label="Pickup spots (optional)">
               <MultiChipGroup options={PICKUP_SPOTS} values={pickupSpots} onChange={setPickupSpots} />
               <ThemedText type="small" themeColor="textSecondary">
@@ -320,6 +440,16 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  draftNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    borderRadius: 12,
+    padding: Spacing.three,
   },
   content: {
     padding: Spacing.three,

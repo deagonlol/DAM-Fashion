@@ -9,6 +9,7 @@ import {
   subscribeToMessages,
 } from '@/lib/data/messages';
 import type { Conversation, Listing, Message } from '@/lib/data/types';
+import { getReadsSnapshot, subscribeToReads, unreadCount } from '@/lib/data/reads';
 import { getUsersSnapshot, subscribeToUsers } from '@/lib/data/users';
 
 export type ConversationSummary = {
@@ -17,6 +18,8 @@ export type ConversationSummary = {
   otherUserAvatarUrl: string | undefined;
   listing: Listing | undefined;
   lastMessage: Message | undefined;
+  /** Messages from the other person since this user last opened the chat. */
+  unread: number;
   /** Lending when the signed-in user owns the listing. Missing listings count as borrowing. */
   role: 'lender' | 'borrower';
 };
@@ -28,10 +31,15 @@ function useAllMessages() {
 /** The current user's conversations, most recently active first. */
 export function useConversationSummaries(): ConversationSummary[] {
   const currentUser = useCurrentUser();
-  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot, getConversationsSnapshot);
+  const conversations = useSyncExternalStore(
+    subscribeToConversations,
+    getConversationsSnapshot,
+    getConversationsSnapshot
+  );
   const messages = useAllMessages();
   const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot, getUsersSnapshot);
   const listings = useListings();
+  const reads = useSyncExternalStore(subscribeToReads, getReadsSnapshot, getReadsSnapshot);
 
   return useMemo(() => {
     const summaries = conversations
@@ -48,17 +56,21 @@ export function useConversationSummaries(): ConversationSummary[] {
           otherUserAvatarUrl: otherUser?.avatarUrl,
           listing,
           lastMessage: thread.at(-1),
+          unread: unreadCount(thread, currentUser.id, reads[conversation.id]),
           role,
         };
       });
-    const activity = (summary: ConversationSummary) =>
-      summary.lastMessage?.createdAt ?? summary.conversation.createdAt;
+    const activity = (summary: ConversationSummary) => summary.lastMessage?.createdAt ?? summary.conversation.createdAt;
     return summaries.sort((a, b) => activity(b).localeCompare(activity(a)));
-  }, [conversations, messages, users, listings, currentUser.id]);
+  }, [conversations, messages, users, listings, reads, currentUser.id]);
 }
 
 export function useConversation(id: string | undefined) {
-  const conversations = useSyncExternalStore(subscribeToConversations, getConversationsSnapshot, getConversationsSnapshot);
+  const conversations = useSyncExternalStore(
+    subscribeToConversations,
+    getConversationsSnapshot,
+    getConversationsSnapshot
+  );
   return useMemo(() => conversations.find((conversation) => conversation.id === id), [conversations, id]);
 }
 
@@ -69,4 +81,10 @@ export function useMessages(conversationId: string | undefined) {
     () => messages.filter((message) => message.conversationId === conversationId),
     [messages, conversationId]
   );
+}
+
+/** Chats with unread messages, for the Inbox tab badge. */
+export function useUnreadChatCount() {
+  const summaries = useConversationSummaries();
+  return useMemo(() => summaries.filter((summary) => summary.unread > 0).length, [summaries]);
 }

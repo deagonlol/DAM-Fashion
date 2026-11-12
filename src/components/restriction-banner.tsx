@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -24,12 +25,23 @@ export function RestrictionBanner() {
 
   return (
     <View
-      style={[styles.banner, { borderColor: penalty.level === 'soft_ban' ? theme.danger : theme.border, backgroundColor: theme.backgroundElement }]}
+      style={[
+        styles.banner,
+        {
+          borderColor: penalty.level === 'soft_ban' ? theme.danger : theme.border,
+          backgroundColor: theme.backgroundElement,
+        },
+      ]}
       accessibilityRole="alert">
       <ThemedText type="smallBold" themeColor={penalty.level === 'soft_ban' ? 'danger' : 'text'}>
         {penalty.level === 'soft_ban' ? 'Account limited' : 'Heads up'}
       </ThemedText>
       <ThemedText type="small">{message}</ThemedText>
+      <Link href="/strikes">
+        <ThemedText type="smallBold" themeColor="accent">
+          See your strikes and appeal
+        </ThemedText>
+      </Link>
     </View>
   );
 }

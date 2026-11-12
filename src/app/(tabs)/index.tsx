@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,9 +11,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useBrowseListings, useTrendingListings } from '@/hooks/use-browse';
+import { useSavedSearchesWithCounts } from '@/hooks/use-saved-searches';
 import { useTheme } from '@/hooks/use-theme';
 import { EMPTY_FILTERS } from '@/lib/data/listings';
 import { CATEGORIES, type Category, type EventTag, type Listing } from '@/lib/data/types';
+import { hasSeenTour } from '@/lib/tour';
 
 const ROW_LENGTH = 10;
 
@@ -33,6 +35,19 @@ const EVENT_TILES: { event: EventTag; label: string; icon: string }[] = [
 /** Home: search, browse by event, and what's trending or new. The full grid lives on Search. */
 export default function HomeScreen() {
   const [query, setQuery] = useState('');
+  const savedSearches = useSavedSearchesWithCounts();
+  const theme = useTheme();
+
+  // New on this device: show the quick tour once.
+  useEffect(() => {
+    let cancelled = false;
+    void hasSeenTour().then((seen) => {
+      if (!seen && !cancelled) router.push('/tour');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [trendingType, setTrendingType] = useState<Category | null>(null);
   const trending = useTrendingListings(ROW_LENGTH, trendingType);
   const newest = useBrowseListings(EMPTY_FILTERS, 'Newest').slice(0, ROW_LENGTH);
@@ -87,7 +102,10 @@ export default function HomeScreen() {
 
           <View style={styles.section}>
             <ThemedText style={[styles.padded, styles.hero]}>
-              Find your fit <ThemedText style={styles.hero} themeColor="accent">on campus</ThemedText>
+              Find your fit{' '}
+              <ThemedText style={styles.hero} themeColor="accent">
+                on campus
+              </ThemedText>
             </ThemedText>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
               {EVENT_TILES.map((tile) => (
@@ -95,6 +113,37 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
           </View>
+
+          {savedSearches.length > 0 ? (
+            <View style={styles.section}>
+              <ThemedText style={[styles.padded, styles.sectionTitle]}>Your saved searches</ThemedText>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+                {savedSearches.map(({ search, newCount }) => (
+                  <Pressable
+                    key={search.id}
+                    onPress={() => router.push({ pathname: '/search', params: { saved: search.id } })}
+                    accessibilityRole="link"
+                    accessibilityLabel={`${search.label}${newCount > 0 ? `, ${newCount} new` : ''}`}
+                    style={({ pressed }) => [
+                      styles.savedChip,
+                      { borderColor: newCount > 0 ? theme.accent : theme.border },
+                      pressed && styles.pressed,
+                    ]}>
+                    <ThemedText type="smallBold" numberOfLines={1}>
+                      {search.label}
+                    </ThemedText>
+                    {newCount > 0 ? (
+                      <View style={[styles.newBadge, { backgroundColor: theme.accent }]}>
+                        <ThemedText type="smallBold" themeColor="onAccent" style={styles.newBadgeText}>
+                          {newCount} new
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
 
           <ListingRow
             title="Trending now"
@@ -223,6 +272,24 @@ const styles = StyleSheet.create({
   chips: {
     paddingHorizontal: Spacing.three,
     gap: Spacing.two,
+  },
+  savedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    maxWidth: 260,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  newBadge: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two,
+  },
+  newBadgeText: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   tile: {
     width: 76,

@@ -54,7 +54,17 @@ function dueTime(rental: Rental) {
 }
 
 /** Every strike against a user within the strike window, oldest first. */
-export function strikesFor(userId: string, rentals: Rental[], reports: Report[], now: Date): Strike[] {
+/** Key for a strike overturned on appeal: who, what kind, and the borrow or report it came from. */
+export const overturnedKey = (userId: string, source: Strike['source'], refId: string) => `${userId}:${source}:${refId}`;
+
+export function strikesFor(
+  userId: string,
+  rentals: Rental[],
+  reports: Report[],
+  now: Date,
+  /** Strikes removed on appeal (see overturnedKey). */
+  overturned: ReadonlySet<string> = new Set()
+): Strike[] {
   const strikes: Strike[] = [];
 
   for (const rental of rentals) {
@@ -93,6 +103,7 @@ export function strikesFor(userId: string, rentals: Rental[], reports: Report[],
 
   const windowStart = now.getTime() - STRIKE_WINDOW_DAYS * DAY;
   return strikes
+    .filter((strike) => !overturned.has(overturnedKey(strike.userId, strike.source, strike.refId)))
     .filter((strike) => new Date(strike.at).getTime() >= windowStart && new Date(strike.at).getTime() <= now.getTime())
     .sort((a, b) => a.at.localeCompare(b.at));
 }
@@ -195,13 +206,27 @@ export function setReports(reports: Report[]) {
   reportsStore.set(reports);
 }
 
+/** Strikes removed on appeal, for everyone (see overturnedKey). */
+const overturnedStore = createStore<ReadonlySet<string>>(new Set());
+
+export const subscribeToOverturned = overturnedStore.subscribe;
+export const getOverturnedSnapshot = overturnedStore.get;
+
+export function setOverturned(keys: Iterable<string>) {
+  overturnedStore.set(new Set(keys));
+}
+
+export function addOverturned(key: string) {
+  overturnedStore.set(new Set([...overturnedStore.get(), key]));
+}
+
 export function setBlocks(blocks: Block[]) {
   blocksStore.set(blocks);
 }
 
 /** A user's current penalty from the live stores. */
 export function penaltyForUser(userId: string, now: Date) {
-  return penaltyFor(strikesFor(userId, rentalsStore.get(), reportsStore.get(), now), now);
+  return penaltyFor(strikesFor(userId, rentalsStore.get(), reportsStore.get(), now, overturnedStore.get()), now);
 }
 
 /** Throws if the user is soft-banned or banned. Call before listing, requesting, or accepting. */

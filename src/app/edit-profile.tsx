@@ -6,13 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { PickupWindowsEditor } from '@/components/pickup-windows-editor';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
-import { deleteAccount, updateProfile, updateProfilePhoto } from '@/lib/data/auth';
+import { deleteAccount, updatePickupWindows, updateProfile, updateProfilePhoto } from '@/lib/data/auth';
 import { MAX_BIO_LENGTH } from '@/lib/data/types';
 
 /** Change your photo, name, and bio. */
@@ -21,6 +22,7 @@ export default function EditProfileScreen() {
   const theme = useTheme();
   const [name, setName] = useState(user.name);
   const [bio, setBio] = useState(user.bio ?? '');
+  const [windows, setWindows] = useState<string[]>(user.pickupWindows ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -43,6 +45,7 @@ export default function EditProfileScreen() {
     setSaving(true);
     try {
       await updateProfile({ name, bio });
+      await updatePickupWindows(windows);
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
@@ -99,6 +102,15 @@ export default function EditProfileScreen() {
             <ThemedText type="small" themeColor="textSecondary" style={styles.counter}>
               {bio.length}/{MAX_BIO_LENGTH}
             </ThemedText>
+          </View>
+
+          <View style={styles.field}>
+            <ThemedText type="smallBold">When you can meet</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Borrowers can only pick pickup and return times you’re usually free. Mornings are 9–11, afternoons 12–4,
+              evenings 5–9. Leave it all blank for any time.
+            </ThemedText>
+            <PickupWindowsEditor value={windows} onChange={setWindows} />
           </View>
 
           <ThemedText type="small" themeColor="textSecondary">

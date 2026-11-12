@@ -3,6 +3,7 @@
  * error type for failed Supabase calls. Only data modules use these.
  */
 import type {
+  Appeal,
   Block,
   Category,
   Conversation,
@@ -10,7 +11,10 @@ import type {
   Listing,
   Message,
   PickupSpot,
+  ProposalStatus,
   Rental,
+  RentalPhoto,
+  RentalProposal,
   RentalStatus,
   Report,
   ReportReason,
@@ -28,6 +32,7 @@ export type ProfileRow = {
   bio: string;
   avatar_url: string | null;
   role: string | null;
+  pickup_windows?: string[] | null;
   created_at: string;
 };
 
@@ -45,6 +50,8 @@ export type ListingRow = {
   price_per_day: number | string;
   sale_price?: number | string | null;
   rentable?: boolean | null;
+  measurements?: string | null;
+  fit_note?: string | null;
   sold_at?: string | null;
   image_uris: string[];
   paused: boolean;
@@ -70,7 +77,14 @@ export type ConversationRow = {
   created_at: string;
 };
 
-export type MessageRow = { id: string; conversation_id: string; sender_id: string; text: string; created_at: string };
+export type MessageRow = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  text: string;
+  image_path?: string | null;
+  created_at: string;
+};
 
 export type RentalRow = {
   id: string;
@@ -91,6 +105,30 @@ export type RentalRow = {
   /** "HH:MM:SS" from Postgres. */
   pickup_time?: string | null;
   return_time?: string | null;
+};
+
+export type RentalPhotoRow = {
+  id: string;
+  rental_id: string;
+  uploader_id: string;
+  stage: 'pickup' | 'return';
+  path: string;
+  created_at: string;
+};
+
+export type RentalProposalRow = {
+  id: string;
+  rental_id: string;
+  proposer_id: string;
+  start_date: string;
+  end_date: string;
+  pickup_time: string | null;
+  return_time: string | null;
+  pickup_spot: string;
+  price_per_day: number | string;
+  note: string;
+  status: string;
+  created_at: string;
 };
 
 export type RentalCodeRow = { rental_id: string; kind: 'pickup' | 'return'; code: string };
@@ -130,6 +168,23 @@ export type ReportRow = {
   created_at: string;
   status: Report['status'];
   reviewed_at: string | null;
+  decided_by?: 'team' | 'ai' | null;
+  ai_note?: string | null;
+};
+
+export type AppealRow = {
+  id: string;
+  user_id: string;
+  source: Appeal['source'];
+  ref_id: string;
+  reason: string;
+  level: 1 | 2;
+  status: Appeal['status'];
+  decided_by: 'team' | 'ai' | null;
+  decision_note: string | null;
+  ai_note: string | null;
+  created_at: string;
+  decided_at: string | null;
 };
 
 /** From upheld_reports(): enough to count a strike, without who filed it. */
@@ -167,6 +222,7 @@ export function toUser(row: ProfileRow, email = ''): User {
     bio: row.bio || undefined,
     joinedAt: row.created_at,
     role: row.role === 'admin' ? 'admin' : undefined,
+    pickupWindows: row.pickup_windows ?? [],
   };
 }
 
@@ -180,6 +236,8 @@ export function toListing(row: ListingRow): Listing {
     events: row.events as EventTag[],
     size: row.size as Size,
     brand: row.brand || undefined,
+    measurements: row.measurements || undefined,
+    fitNote: row.fit_note || undefined,
     pickupSpots: (row.pickup_spots ?? []) as PickupSpot[],
     pricePerDay: Number(row.price_per_day),
     salePrice: row.sale_price == null ? undefined : Number(row.sale_price),
@@ -219,11 +277,40 @@ export function toMessage(row: MessageRow): Message {
     conversationId: row.conversation_id,
     senderId: row.sender_id,
     text: row.text,
+    imagePath: row.image_path ?? undefined,
     createdAt: row.created_at,
   };
 }
 
 /** Codes are only included for the person who holds them (the one who shows the code). */
+export function toRentalPhoto(row: RentalPhotoRow): RentalPhoto {
+  return {
+    id: row.id,
+    rentalId: row.rental_id,
+    uploaderId: row.uploader_id,
+    stage: row.stage,
+    path: row.path,
+    createdAt: row.created_at,
+  };
+}
+
+export function toRentalProposal(row: RentalProposalRow): RentalProposal {
+  return {
+    id: row.id,
+    rentalId: row.rental_id,
+    proposerId: row.proposer_id,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    pickupTime: row.pickup_time ? row.pickup_time.slice(0, 5) : undefined,
+    returnTime: row.return_time ? row.return_time.slice(0, 5) : undefined,
+    pickupSpot: row.pickup_spot as PickupSpot,
+    pricePerDay: Number(row.price_per_day),
+    note: row.note,
+    status: row.status as ProposalStatus,
+    createdAt: row.created_at,
+  };
+}
+
 export function toRental(row: RentalRow, codes: RentalCodeRow[] = []): Rental {
   const code = (kind: RentalCodeRow['kind']) =>
     codes.find((candidate) => candidate.rental_id === row.id && candidate.kind === kind)?.code;
@@ -304,6 +391,25 @@ export function toReport(row: ReportRow): Report {
     createdAt: row.created_at,
     status: row.status,
     reviewedAt: optional(row.reviewed_at),
+    decidedBy: row.decided_by ?? undefined,
+    aiNote: row.ai_note ?? undefined,
+  };
+}
+
+export function toAppeal(row: AppealRow): Appeal {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    source: row.source,
+    refId: row.ref_id,
+    reason: row.reason,
+    level: row.level,
+    status: row.status,
+    decidedBy: row.decided_by ?? undefined,
+    decisionNote: row.decision_note ?? undefined,
+    aiNote: row.ai_note ?? undefined,
+    createdAt: row.created_at,
+    decidedAt: row.decided_at ?? undefined,
   };
 }
 

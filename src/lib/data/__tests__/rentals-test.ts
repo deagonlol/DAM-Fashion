@@ -21,6 +21,7 @@ import {
   pickRange,
   ordersFor,
   codeToShow,
+  isExpiredRequest,
   MEETING_TIMES,
   rangesOverlap,
   rentalDays,
@@ -84,13 +85,18 @@ describe('dates', () => {
 
 describe('validateRequest', () => {
   const today = '2026-10-16';
-  const request = { listingId: 'a', startDate: '2026-10-20', endDate: '2026-10-21', pickupSpot: 'Texas Union' as const };
+  const request = {
+    listingId: 'a',
+    startDate: '2026-10-20',
+    endDate: '2026-10-21',
+    pickupSpot: 'Texas Union' as const,
+  };
 
   it('allows a normal request', () => {
     expect(() => validateRequest([], listings[0], 'me', request, today)).not.toThrow();
   });
 
-  it("blocks borrowing your own item", () => {
+  it('blocks borrowing your own item', () => {
     expect(() => validateRequest([], listing('a', 'me'), 'me', request, today)).toThrow("can't borrow your own");
   });
 
@@ -127,7 +133,9 @@ describe('validateRequest', () => {
   });
 
   it("blocks dates overlapping someone else's accepted or active borrow", () => {
-    const booked = [rental({ borrowerId: 'other', status: 'accepted', startDate: '2026-10-21', endDate: '2026-10-22' })];
+    const booked = [
+      rental({ borrowerId: 'other', status: 'accepted', startDate: '2026-10-21', endDate: '2026-10-22' }),
+    ];
     expect(() => validateRequest(booked, listings[0], 'me', request, today)).toThrow('already booked');
   });
 
@@ -201,9 +209,7 @@ describe('lifecycle', () => {
 
   it("can't skip steps", () => {
     expect(() => confirmPickup(rental({ ...CODES }), 'me', '1111', now)).toThrow("isn't waiting for pickup");
-    expect(() => confirmReturn(rental({ status: 'accepted', ...CODES }), 'lender', '2222', now)).toThrow(
-      "isn't out"
-    );
+    expect(() => confirmReturn(rental({ status: 'accepted', ...CODES }), 'lender', '2222', now)).toThrow("isn't out");
   });
 });
 
@@ -268,17 +274,30 @@ describe('orders', () => {
     const missed = rental({ status: 'no_show', startDate: '2026-09-10', endDate: '2026-09-10' });
     const declined = rental({ status: 'declined' });
     const lentOut = rental({ status: 'picked_up', borrowerId: 'other', lenderId: 'me' });
-    const result = ordersFor([later, out, waiting, oldReturn, newReturn, missed, declined, lentOut], 'me', 'borrower');
+    const result = ordersFor(
+      [later, out, waiting, oldReturn, newReturn, missed, declined, lentOut],
+      'me',
+      'borrower',
+      '2026-10-20'
+    );
     expect(result.active).toEqual([out, later, waiting]);
     expect(result.past).toEqual([newReturn, missed, oldReturn]);
-    expect(ordersFor([lentOut, out], 'me', 'lender')).toEqual({ active: [lentOut], past: [], requests: [] });
+    expect(ordersFor([lentOut, out], 'me', 'lender', '2026-10-20')).toEqual({
+      active: [lentOut],
+      past: [],
+      requests: [],
+    });
     expect(result.requests).toEqual([]);
   });
 
   it('gives lenders their incoming requests in a separate list', () => {
     const asked = rental({ status: 'requested', borrowerId: 'other', lenderId: 'me' });
     const lentOut = rental({ status: 'picked_up', borrowerId: 'other', lenderId: 'me' });
-    expect(ordersFor([asked, lentOut], 'me', 'lender')).toEqual({ active: [lentOut], past: [], requests: [asked] });
+    expect(ordersFor([asked, lentOut], 'me', 'lender', '2026-10-20')).toEqual({
+      active: [lentOut],
+      past: [],
+      requests: [asked],
+    });
   });
 
   it('tracks each borrow through requested, confirmed, pickup, and return', () => {
@@ -449,10 +468,17 @@ describe('borrowCount and lendCount', () => {
 
 describe('availability set by the owner', () => {
   const today = '2026-10-16';
-  const request = { listingId: 'a', startDate: '2026-10-20', endDate: '2026-10-22', pickupSpot: 'Texas Union' as const };
+  const request = {
+    listingId: 'a',
+    startDate: '2026-10-20',
+    endDate: '2026-10-22',
+    pickupSpot: 'Texas Union' as const,
+  };
 
-  it("blocks requests for paused listings", () => {
-    expect(() => validateRequest([], { ...listings[0], paused: true }, 'me', request, today)).toThrow("isn't available");
+  it('blocks requests for paused listings', () => {
+    expect(() => validateRequest([], { ...listings[0], paused: true }, 'me', request, today)).toThrow(
+      "isn't available"
+    );
   });
 
   it('blocks requests after the item is sold', () => {
@@ -557,7 +583,12 @@ describe('pickup times', () => {
 describe('validateRequest times', () => {
   it('needs the return after the pickup on a one-day borrow', () => {
     const item = listing('a', 'owner');
-    const oneDay = { listingId: 'a', startDate: '2026-10-25', endDate: '2026-10-25', pickupSpot: 'Texas Union' as const };
+    const oneDay = {
+      listingId: 'a',
+      startDate: '2026-10-25',
+      endDate: '2026-10-25',
+      pickupSpot: 'Texas Union' as const,
+    };
     expect(() =>
       validateRequest([], item, 'me', { ...oneDay, pickupTime: '16:00', returnTime: '12:00' }, '2026-10-20')
     ).toThrow('return time has to be after');
@@ -579,7 +610,53 @@ describe('validateRequest times', () => {
 describe('sell-only listings', () => {
   it("can't be borrowed", () => {
     const item = { ...listing('a', 'owner'), rentable: false, pricePerDay: 0, salePrice: 30 };
-    const request = { listingId: 'a', startDate: '2026-10-25', endDate: '2026-10-26', pickupSpot: 'Texas Union' as const };
+    const request = {
+      listingId: 'a',
+      startDate: '2026-10-25',
+      endDate: '2026-10-26',
+      pickupSpot: 'Texas Union' as const,
+    };
     expect(() => validateRequest([], item, 'me', request, '2026-10-20')).toThrow('only for sale');
+  });
+});
+
+describe('expired requests', () => {
+  const stale = rental({
+    status: 'requested',
+    startDate: '2026-11-06',
+    endDate: '2026-11-07',
+    borrowerId: 'other',
+    lenderId: 'me',
+  });
+  const upcoming = rental({
+    status: 'requested',
+    startDate: '2026-11-14',
+    endDate: '2026-11-15',
+    borrowerId: 'other',
+    lenderId: 'me',
+  });
+
+  it('expires a waiting request once its pickup day has passed', () => {
+    expect(isExpiredRequest(stale, '2026-11-11')).toBe(true);
+    expect(isExpiredRequest(upcoming, '2026-11-11')).toBe(false);
+    expect(isExpiredRequest({ ...stale, startDate: '2026-11-11' }, '2026-11-11')).toBe(false);
+    expect(isExpiredRequest({ ...stale, status: 'accepted' }, '2026-11-11')).toBe(false);
+  });
+
+  it('moves expired requests out of Requests and into Past', () => {
+    expect(ordersFor([stale, upcoming], 'me', 'lender', '2026-11-11')).toEqual({
+      active: [],
+      past: [stale],
+      requests: [upcoming],
+    });
+  });
+
+  it('labels them expired with no tracker', () => {
+    expect(orderStage(stale, local('2026-11-11T10:00:00'), 'lender')).toEqual({
+      status: 'Expired: pickup day passed',
+      tone: 'muted',
+      next: null,
+      step: null,
+    });
   });
 });

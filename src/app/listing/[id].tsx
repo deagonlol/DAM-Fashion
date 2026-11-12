@@ -201,6 +201,14 @@ export default function ListingDetailScreen() {
             </View>
           ) : null}
 
+          {listing.measurements || listing.fitNote ? (
+            <View style={styles.section}>
+              <ThemedText type="smallBold">Fit</ThemedText>
+              {listing.measurements ? <ThemedText>{listing.measurements}</ThemedText> : null}
+              {listing.fitNote ? <ThemedText themeColor="textSecondary">{listing.fitNote}</ThemedText> : null}
+            </View>
+          ) : null}
+
           {listing.events.length > 0 ? (
             <View style={styles.tags}>
               {listing.events.map((event) => (

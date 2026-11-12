@@ -169,6 +169,8 @@ async function listingColumns(ownerId: string, input: NewListing) {
     events: input.events,
     size: input.size,
     brand: input.brand?.trim() ?? '',
+    measurements: input.measurements?.trim() ?? '',
+    fit_note: input.fitNote?.trim() ?? '',
     pickup_spots: input.pickupSpots ?? [],
     price_per_day: input.pricePerDay,
     sale_price: input.salePrice ?? null,

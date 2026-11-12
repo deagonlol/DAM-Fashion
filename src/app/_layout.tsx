@@ -135,6 +135,15 @@ export default function RootLayout() {
                 options={{ title: "Reports" }}
               />
               <Stack.Screen name="shelf/[id]" options={{ title: "" }} />
+              <Stack.Screen name="strikes" options={{ title: "Your strikes" }} />
+              <Stack.Screen
+                name="tour"
+                options={{ headerShown: false, presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="propose/[rentalId]"
+                options={{ title: "Change plans", presentation: "modal" }}
+              />
               <Stack.Screen
                 name="shelf/name"
                 options={{ title: "New shelf", presentation: "modal" }}

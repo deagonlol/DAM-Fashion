@@ -322,17 +322,30 @@ const PAST_ORDER: RentalStatus[] = ['returned', 'no_show'];
  * requests never happened, so they're left out. Lenders get requests waiting on their answer
  * in their own list; borrowers see their own requests as active, since they're just waiting.
  */
-export function ordersFor(rentals: Rental[], userId: string, role: 'borrower' | 'lender') {
+export function ordersFor(
+  rentals: Rental[],
+  userId: string,
+  role: 'borrower' | 'lender',
+  today: string = toDateString(new Date())
+) {
   const mine = rentals.filter((rental) => (role === 'borrower' ? rental.borrowerId : rental.lenderId) === userId);
   const soonestFirst = (a: Rental, b: Rental) => a.startDate.localeCompare(b.startDate);
-  const active = mine.filter((rental) => ACTIVE_ORDER.includes(rental.status)).sort(soonestFirst);
+  const active = mine
+    .filter((rental) => ACTIVE_ORDER.includes(rental.status) && !isExpiredRequest(rental, today))
+    .sort(soonestFirst);
   return {
     active: role === 'lender' ? active.filter((rental) => rental.status !== 'requested') : active,
+    // Requests whose pickup day passed never happened, so they sit with the past ones.
     past: mine
-      .filter((rental) => PAST_ORDER.includes(rental.status))
+      .filter((rental) => PAST_ORDER.includes(rental.status) || isExpiredRequest(rental, today))
       .sort((a, b) => b.endDate.localeCompare(a.endDate)),
     requests: role === 'lender' ? active.filter((rental) => rental.status === 'requested') : [],
   };
+}
+
+/** A request still waiting for an answer after its pickup day passed. It can't be accepted. */
+export function isExpiredRequest(rental: Rental, today: string) {
+  return rental.status === 'requested' && rental.startDate < today;
 }
 
 /** The tracker steps on an order card. */
@@ -356,6 +369,9 @@ export function orderStage(rental: Rental, now: Date, role: 'borrower' | 'lender
   const when = (date: string, time?: string) =>
     `${capitalize(dayLabel(date, now))}${time ? `, ${formatTime(time)}` : ''} · ${rental.pickupSpot}`;
   const pickup = { label: 'Pickup', text: when(rental.startDate, rental.pickupTime) };
+  if (isExpiredRequest(rental, toDateString(now))) {
+    return { status: 'Expired: pickup day passed', tone: 'muted', next: null, step: null };
+  }
   switch (rental.status) {
     case 'requested':
       return {

@@ -3,11 +3,13 @@ import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import type { ColorValue } from "react-native";
 
 import { Fonts } from "@/constants/theme";
+import { useUnreadChatCount } from "@/hooks/use-conversations";
 import { useTheme } from "@/hooks/use-theme";
 
 /** Web uses JS tabs: a regular bottom bar, since native tabs are built for iOS and Android. */
 export default function TabLayout() {
   const theme = useTheme();
+  const unreadChats = useUnreadChatCount();
 
   return (
     <Tabs
@@ -33,6 +35,8 @@ export default function TabLayout() {
         name="inbox"
         options={{
           title: "Inbox",
+          tabBarBadge: unreadChats > 0 ? unreadChats : undefined,
+          tabBarBadgeStyle: { backgroundColor: theme.accent, color: theme.onAccent },
           tabBarIcon: icon({
             ios: "envelope.fill",
             android: "mail",

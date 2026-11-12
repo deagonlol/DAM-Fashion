@@ -1,11 +1,13 @@
 import { Image } from 'expo-image';
 import { router, Stack } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { ConditionPhotos } from '@/components/condition-photos';
 import { STATUS_LABELS } from '@/components/rental-row';
 import { ChipGroup } from '@/components/chip-group';
+import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -15,19 +17,29 @@ import { useRental } from '@/hooks/use-rentals';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser } from '@/hooks/use-users';
+import { decideAppeal, getAppealsSnapshot, subscribeToAppeals } from '@/lib/data/appeals';
 import { decideReport, type Penalty } from '@/lib/data/moderation';
 import { reportPhotoUrls } from '@/lib/data/photos';
-import type { Report } from '@/lib/data/types';
+import type { Appeal, Report } from '@/lib/data/types';
 import { formatDateRange, formatMessageTime } from '@/lib/format';
 
-const TABS = ['Open', 'Reviewed'] as const;
+const TABS = ['Open', 'Appeals', 'Reviewed'] as const;
 type Tab = (typeof TABS)[number];
 
-/** Lendr team queue: uphold a report (adds a strike) or dismiss it. */
+/**
+ * Lendr team queue: uphold a report (adds a strike) or dismiss it, and decide appeals. The AI
+ * reviewer handles clear cases; what's here is what it left for a person, with its notes.
+ */
 export default function AdminReportsScreen() {
   const user = useCurrentUser();
   const reports = useReports();
+  const appeals = useSyncExternalStore(subscribeToAppeals, getAppealsSnapshot, getAppealsSnapshot);
   const [tab, setTab] = useState<Tab>('Open');
+  const pendingAppeals = useMemo(
+    () =>
+      appeals.filter((appeal) => appeal.status === 'pending').sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [appeals]
+  );
 
   const shown = useMemo(
     () =>
@@ -48,20 +60,101 @@ export default function AdminReportsScreen() {
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen options={{ title: 'Reports' }} />
-      <FlatList
-        data={shown}
-        keyExtractor={(report) => report.id}
-        renderItem={({ item }) => <ReportCard report={item} />}
+      <FlatList<Report | Appeal>
+        data={tab === 'Appeals' ? pendingAppeals : shown}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) =>
+          tab === 'Appeals' ? <AppealCard appeal={item as Appeal} /> : <ReportCard report={item as Report} />
+        }
         ListHeaderComponent={<ChipGroup options={TABS} value={tab} onChange={(next) => next && setTab(next)} />}
         ListEmptyComponent={
           <ThemedText themeColor="textSecondary" style={styles.empty}>
-            {tab === 'Open' ? 'No open reports. 🎉' : 'Nothing reviewed yet.'}
+            {tab === 'Open'
+              ? 'No open reports. 🎉'
+              : tab === 'Appeals'
+                ? 'No appeals waiting. 🎉'
+                : 'Nothing reviewed yet.'}
           </ThemedText>
         }
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
       />
     </ThemedView>
+  );
+}
+
+const STRIKE_LABELS: Record<Appeal['source'], string> = {
+  no_show: 'Missed pickup',
+  late_return: 'Late return',
+  report: 'Upheld report',
+};
+
+/** An appeal waiting for a person: a second appeal, or one the AI wasn't sure about. */
+function AppealCard({ appeal }: { appeal: Appeal }) {
+  const theme = useTheme();
+  const person = useUser(appeal.userId);
+  const penalty = usePenalty(appeal.userId);
+  const reports = useReports();
+  const report = appeal.source === 'report' ? reports.find((candidate) => candidate.id === appeal.refId) : undefined;
+  const rental = useRental(report?.rentalId ?? (appeal.source === 'report' ? undefined : appeal.refId));
+  const listing = useListing(rental?.listingId);
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(approve: boolean) {
+    setError(null);
+    try {
+      await decideAppeal(appeal.id, approve, note);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    }
+  }
+
+  return (
+    <View style={[styles.card, { borderColor: theme.border }]}>
+      <View style={styles.headerRow}>
+        <ThemedText type="smallBold" style={styles.flex}>
+          {appeal.level === 2 ? 'Second appeal (final)' : 'Appeal'} · {STRIKE_LABELS[appeal.source]}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {formatMessageTime(appeal.createdAt)}
+        </ThemedText>
+      </View>
+      <Pressable onPress={() => router.push(`/user/${appeal.userId}`)} accessibilityRole="link">
+        <ThemedText type="small">
+          From <ThemedText type="smallBold">{person?.name ?? 'unknown'}</ThemedText> ({penaltyLabel(penalty)}) ›
+        </ThemedText>
+      </Pressable>
+      <ThemedText type="small" themeColor="textSecondary">
+        {report ? `Report: ${report.reason}${report.details ? ` · “${report.details}”` : ''}` : ''}
+        {rental ? `Borrow: ${listing?.title ?? 'item'} · ${formatDateRange(rental.startDate, rental.endDate)}` : ''}
+      </ThemedText>
+      <ThemedText>{appeal.reason}</ThemedText>
+      {appeal.aiNote ? (
+        <View style={[styles.quote, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            AI review
+          </ThemedText>
+          <ThemedText type="small">{appeal.aiNote}</ThemedText>
+        </View>
+      ) : null}
+      {rental ? <ConditionPhotos rental={rental} readOnly /> : null}
+      <TextField
+        value={note}
+        onChangeText={setNote}
+        placeholder="Note to the student (optional, shown with the decision)"
+        multiline
+      />
+      <View style={styles.actions}>
+        <Button title="Deny" variant="secondary" style={styles.flex} onPress={() => decide(false)} />
+        <Button title="Approve (remove strike)" style={styles.flex} onPress={() => decide(true)} />
+      </View>
+      {error ? (
+        <ThemedText type="small" themeColor="danger">
+          {error}
+        </ThemedText>
+      ) : null}
+    </View>
   );
 }
 
@@ -133,6 +226,7 @@ function ReportCard({ report }: { report: Report }) {
       ) : null}
       {report.photoPaths && report.photoPaths.length > 0 ? <ReportPhotos paths={report.photoPaths} /> : null}
 
+      {rental ? <ConditionPhotos rental={rental} readOnly /> : null}
       {rental ? (
         <ThemedText type="small" themeColor="textSecondary">
           Borrow: {listing?.title ?? 'item'} · {formatDateRange(rental.startDate, rental.endDate)} ·{' '}
@@ -145,6 +239,15 @@ function ReportCard({ report }: { report: Report }) {
             View the chat ›
           </ThemedText>
         </Pressable>
+      ) : null}
+
+      {report.aiNote ? (
+        <View style={[styles.quote, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="small" themeColor="textSecondary">
+            AI review
+          </ThemedText>
+          <ThemedText type="small">{report.aiNote}</ThemedText>
+        </View>
       ) : null}
 
       {report.status === 'open' && rental?.status === 'no_show' && rental.noShowReportedBy !== report.reportedUserId ? (
@@ -168,6 +271,7 @@ function ReportCard({ report }: { report: Report }) {
       ) : (
         <ThemedText type="smallBold" themeColor={report.status === 'upheld' ? 'danger' : 'textSecondary'}>
           {report.status === 'upheld' ? 'Upheld: strike added' : 'Dismissed'}
+          {report.decidedBy === 'ai' ? ' · by AI' : report.decidedBy === 'team' ? ' · by the team' : ''}
         </ThemedText>
       )}
     </View>

@@ -1,10 +1,12 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { Fonts } from '@/constants/theme';
+import { useUnreadChatCount } from '@/hooks/use-conversations';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TabLayout() {
   const theme = useTheme();
+  const unreadChats = useUnreadChatCount();
 
   return (
     <NativeTabs
@@ -23,6 +25,7 @@ export default function TabLayout() {
       <NativeTabs.Trigger name="inbox">
         <NativeTabs.Trigger.Label>Inbox</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="envelope.fill" md="mail" />
+        <NativeTabs.Trigger.Badge hidden={unreadChats === 0}>{String(unreadChats)}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="closet">

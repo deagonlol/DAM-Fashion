@@ -3,6 +3,7 @@
  * through its Realtime subscription.
  */
 import { supabase } from '../supabase';
+import { uploadPrivatePhoto } from './photos';
 import { assertNotBlocked } from './moderation';
 import { getCurrentUserId } from './session';
 import { getListingSnapshot } from './listings';
@@ -89,17 +90,24 @@ export async function getOrCreateConversation(listingId: string, borrowerId?: st
   return conversation;
 }
 
-export async function sendMessage(conversationId: string, text: string): Promise<Message> {
+export async function sendMessage(conversationId: string, text: string, photoUri?: string): Promise<Message> {
   const conversation = conversationsStore.get().find((candidate) => candidate.id === conversationId);
   if (!conversation) throw new Error('Conversation not found.');
-  if (!conversation.participantIds.includes(getCurrentUserId())) {
+  const senderId = getCurrentUserId();
+  if (!conversation.participantIds.includes(senderId)) {
     throw new Error('Only people in this conversation can send messages.');
   }
   assertNotBlocked(...conversation.participantIds);
+  const imagePath = photoUri ? await uploadPrivatePhoto('chat-photos', conversationId, senderId, photoUri) : null;
   const row = unwrap(
     await supabase
       .from('messages')
-      .insert({ conversation_id: conversationId, sender_id: getCurrentUserId(), text: text.trim() })
+      .insert({
+        conversation_id: conversationId,
+        sender_id: senderId,
+        text: text.trim(),
+        ...(imagePath ? { image_path: imagePath } : {}),
+      })
       .select()
       .single<MessageRow>()
   );

@@ -13,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { UserRow } from '@/components/user-row';
 import { Spacing } from '@/constants/theme';
+import { useSavedSearches } from '@/hooks/use-saved-searches';
 import { useTheme } from '@/hooks/use-theme';
 import { useBrowseListings, useBrowsePeople } from '@/hooks/use-browse';
 import { useRentals } from '@/hooks/use-rentals';
@@ -26,6 +27,14 @@ import {
   type PhotoMatch,
 } from '@/lib/data/image-search';
 import { parseSearchQuery, type SearchIntent } from '@/lib/data/search';
+import {
+  deleteSavedSearch,
+  getSavedSearchesSnapshot,
+  hasSearchCriteria,
+  markSavedSearchSeen,
+  sameSearch,
+  saveSearch,
+} from '@/lib/data/saved-searches';
 import {
   CATEGORIES,
   DEALS,
@@ -56,10 +65,14 @@ type Params = {
   sort?: string;
   /** Home's search bar buttons: open the photo menu or the filter row right away. */
   open?: string;
+  /** A saved search from Home, by id. */
+  saved?: string;
 };
 
 /** The filters a search starts with, from whatever Home passed in. */
-function initialFilters({ q, event, category }: Params): ListingFilters {
+function initialFilters({ q, event, category, saved }: Params): ListingFilters {
+  const savedSearch = saved ? getSavedSearchesSnapshot().find((search) => search.id === saved) : undefined;
+  if (savedSearch) return savedSearch.filters;
   if (q) {
     const intent = parseSearchQuery(q);
     return {
@@ -84,6 +97,13 @@ export default function SearchScreen() {
   const theme = useTheme();
   const [mode, setMode] = useState<Mode>('Items');
   const [filters, setFilters] = useState<ListingFilters>(() => initialFilters(params));
+  const savedSearches = useSavedSearches();
+  const savedMatch = savedSearches.find((search) => sameSearch(search.filters, filters));
+
+  // Opening a saved search counts its new listings as seen.
+  useEffect(() => {
+    if (params.saved) void markSavedSearchSeen(params.saved).catch(() => {});
+  }, [params.saved]);
   const [sort, setSort] = useState<ListingSort>(
     () => SORT_OPTIONS.find((option) => option === params.sort) ?? 'For you'
   );
@@ -116,7 +136,9 @@ export default function SearchScreen() {
     filters.categories.length + filters.events.length + filters.sizes.length + (filters.maxPrice !== null ? 1 : 0);
   const count = mode === 'Items' ? results.length : people.length;
   const countLabel =
-    mode === 'Items' ? `${count} ${count === 1 ? 'result' : 'results'}` : `${count} ${count === 1 ? 'person' : 'people'}`;
+    mode === 'Items'
+      ? `${count} ${count === 1 ? 'result' : 'results'}`
+      : `${count} ${count === 1 ? 'person' : 'people'}`;
 
   function update(patch: Partial<ListingFilters>) {
     setFilters((current) => ({ ...current, ...patch }));
@@ -224,9 +246,7 @@ export default function SearchScreen() {
               options={PRICE_LABELS}
               value={priceLabel}
               allowDeselect
-              onChange={(label) =>
-                update({ maxPrice: label ? PRICE_LIMITS[PRICE_LABELS.indexOf(label)] : null })
-              }
+              onChange={(label) => update({ maxPrice: label ? PRICE_LIMITS[PRICE_LABELS.indexOf(label)] : null })}
             />
           </FilterPanel>
         );
@@ -280,7 +300,9 @@ export default function SearchScreen() {
           <ChipGroup options={MODES} value={mode} onChange={(next) => next && setMode(next)} />
           <SearchBar
             value={filters.query}
-            onChangeText={(query) => (mode === 'Items' ? applyIntent(parseSearchQuery(query), query) : update({ query }))}
+            onChangeText={(query) =>
+              mode === 'Items' ? applyIntent(parseSearchQuery(query), query) : update({ query })
+            }
             placeholder={mode === 'Items' ? 'Try “black formal dress under $15”' : 'Search people by name'}
             returnKeyType="search"
             clearButtonMode="while-editing"
@@ -333,10 +355,24 @@ export default function SearchScreen() {
               </Pressable>
             </View>
           ) : null}
-          {mode === 'Items' && !photoSearch && showUnderstood ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              Looking for {understood.join(' · ')}
-            </ThemedText>
+          {mode === 'Items' && !photoSearch && (showUnderstood || hasSearchCriteria(filters)) ? (
+            <View style={styles.understoodRow}>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.flexText}>
+                {showUnderstood ? `Looking for ${understood.join(' · ')}` : ''}
+              </ThemedText>
+              {hasSearchCriteria(filters) ? (
+                <Pressable
+                  onPress={() => (savedMatch ? deleteSavedSearch(savedMatch.id) : saveSearch(filters)).catch(() => {})}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: !!savedMatch }}
+                  accessibilityLabel={savedMatch ? 'Saved search. Tap to remove' : 'Save this search'}
+                  hitSlop={8}>
+                  <ThemedText type="smallBold" themeColor="accent">
+                    {savedMatch ? '★ Saved' : '☆ Save search'}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
           {mode === 'Items' ? (
             <>
@@ -464,6 +500,14 @@ const styles = StyleSheet.create({
   },
   chips: {
     gap: Spacing.two,
+  },
+  understoodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  flexText: {
+    flex: 1,
   },
   quick: {
     flexDirection: 'row',

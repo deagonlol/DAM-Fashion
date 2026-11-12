@@ -86,17 +86,23 @@ export default function InboxScreen() {
 function ConversationRow({ summary }: { summary: ConversationSummary }) {
   const theme = useTheme();
   const currentUser = useCurrentUser();
-  const { conversation, otherUserName, otherUserAvatarUrl, listing, lastMessage } = summary;
+  const { conversation, otherUserName, otherUserAvatarUrl, listing, lastMessage, unread } = summary;
   const preview = lastMessage
-    ? `${lastMessage.senderId === currentUser.id ? 'You: ' : ''}${lastMessage.text}`
+    ? `${lastMessage.senderId === currentUser.id ? 'You: ' : ''}${lastMessage.text || (lastMessage.imagePath ? '📷 Photo' : '')}`
     : 'No messages yet';
 
   return (
     <Pressable
       onPress={() => router.push(`/chat/${conversation.id}`)}
       accessibilityRole="link"
+      accessibilityLabel={`${otherUserName}${unread > 0 ? `, ${unread} unread` : ''}. ${preview}`}
       style={({ pressed }) => [styles.row, { borderColor: theme.border }, pressed && styles.pressed]}>
-      <Avatar name={otherUserName} uri={otherUserAvatarUrl} size={48} />
+      <View>
+        <Avatar name={otherUserName} uri={otherUserAvatarUrl} size={48} />
+        {unread > 0 ? (
+          <View style={[styles.unreadDot, { backgroundColor: theme.accent, borderColor: theme.background }]} />
+        ) : null}
+      </View>
       <View style={styles.rowText}>
         <View style={styles.rowTop}>
           <ThemedText type="smallBold" numberOfLines={1} style={styles.flex}>
@@ -113,7 +119,7 @@ function ConversationRow({ summary }: { summary: ConversationSummary }) {
             {summary.role === 'lender' ? `Your listing · ${listing.title}` : listing.title}
           </ThemedText>
         ) : null}
-        <ThemedText type="small" numberOfLines={1}>
+        <ThemedText type={unread > 0 ? 'smallBold' : 'small'} numberOfLines={1}>
           {preview}
         </ThemedText>
       </View>
@@ -131,6 +137,15 @@ function ConversationRow({ summary }: { summary: ConversationSummary }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
   },
   flex: {
     flex: 1,

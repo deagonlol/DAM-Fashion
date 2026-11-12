@@ -18,10 +18,11 @@ import { useNow } from '@/hooks/use-now';
 import { useRentals } from '@/hooks/use-rentals';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
+import { useUser } from '@/hooks/use-users';
+import { timesForDate } from '@/lib/data/availability';
 import {
   bookedDays,
   MAX_RENTAL_DAYS,
-  MEETING_TIMES,
   openOfferCount,
   pickRange,
   rangesOverlap,
@@ -45,6 +46,7 @@ export default function RequestBorrowScreen() {
   const [pickupTime, setPickupTime] = useState<string | null>(null);
   const [returnTime, setReturnTime] = useState<string | null>(null);
   const now = useNow();
+  const lender = useUser(listing?.ownerId);
   const [message, setMessage] = useState('');
   const [offer, setOffer] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +96,18 @@ export default function RequestBorrowScreen() {
   const pickupPast = (time: string) => startDate === today && time <= nowTime;
   const sameDay = startDate !== null && startDate === endDate;
   const returnTooEarly = (time: string) => sameDay && pickupTime !== null && time <= pickupTime;
-  const timesOk = pickupTime !== null && returnTime !== null && !pickupPast(pickupTime) && !returnTooEarly(returnTime);
+  // Only times the lender is usually free (all times if they haven't said).
+  const pickupTimes = timesForDate(lender?.pickupWindows, startDate);
+  const returnTimes = timesForDate(lender?.pickupWindows, endDate);
+  const hasWindows = (lender?.pickupWindows?.length ?? 0) > 0;
+  const lenderName = lender?.name.split(' ')[0] ?? 'The lender';
+  const timesOk =
+    pickupTime !== null &&
+    returnTime !== null &&
+    pickupTimes.includes(pickupTime) &&
+    returnTimes.includes(returnTime) &&
+    !pickupPast(pickupTime) &&
+    !returnTooEarly(returnTime);
   const canSubmit = startDate !== null && endDate !== null && pickupSpot !== null && timesOk && offerOk && !submitting;
 
   async function handleSubmit() {
@@ -180,14 +193,14 @@ export default function RequestBorrowScreen() {
           <View style={styles.section}>
             <TimePicker
               label={startDate ? `Pickup time · ${formatDay(startDate)}` : 'Pickup time'}
-              times={MEETING_TIMES}
+              times={pickupTimes}
               value={pickupTime}
               onChange={setPickupTime}
               isDisabled={pickupPast}
             />
             <TimePicker
               label={endDate ? `Return time · ${formatDay(endDate)}` : 'Return time'}
-              times={MEETING_TIMES}
+              times={returnTimes}
               value={returnTime}
               onChange={setReturnTime}
               isDisabled={returnTooEarly}
@@ -196,9 +209,16 @@ export default function RequestBorrowScreen() {
               <ThemedText type="small" themeColor="danger">
                 For a one-day borrow, return after the {formatTime(pickupTime)} pickup.
               </ThemedText>
+            ) : (startDate && pickupTimes.length === 0) || (endDate && returnTimes.length === 0) ? (
+              <ThemedText type="small" themeColor="danger">
+                {lenderName} isn’t usually free on your {startDate && pickupTimes.length === 0 ? 'pickup' : 'return'}{' '}
+                day. Pick another day, or ask them in chat.
+              </ThemedText>
             ) : (
               <ThemedText type="small" themeColor="textSecondary">
-                Austin time. You can change plans with the lender in chat.
+                {hasWindows
+                  ? `Showing times ${lenderName} is usually free. Austin time.`
+                  : 'Austin time. You can change plans with the lender in chat.'}
               </ThemedText>
             )}
           </View>

@@ -8,7 +8,7 @@ import type { User as AuthUser } from '@supabase/supabase-js';
 
 import { supabase } from '../supabase';
 import { penaltyForUser, restrictionMessage } from './moderation';
-import { deleteAllPhotos, uploadPhoto } from './photos';
+import { deleteAllPhotos, ownPrivatePhotoPaths, removePrivatePhotos, uploadPhoto } from './photos';
 import { toUser, unwrap, type ProfileRow } from './rows';
 import { endSession, getCurrentUserId, getSessionSnapshot, startSession } from './session';
 import { createStore } from './store';
@@ -224,14 +224,24 @@ export async function updateProfile(input: { name: string; bio: string }) {
   return saveProfile({ name, bio });
 }
 
+/** Saves when the user is usually free to meet borrowers. Empty means any time. */
+export async function updatePickupWindows(windows: string[]) {
+  getCurrentUserId();
+  return saveProfile({ pickup_windows: windows });
+}
+
 /** Deletes the account and everything in it, then signs out. */
 export async function deleteAccount() {
   const userId = getCurrentUserId();
+  // Chat and condition photos are found through rows that go away with the account, so look
+  // them up first.
+  const privatePhotos = await ownPrivatePhotoPaths(userId).catch(() => null);
   const { error } = await supabase.rpc('delete_account');
   if (error) throw new AuthError(error.message);
   // Photos aren't tied to the account in the database, so clear them out too. The account is
   // already gone if this fails, so don't block signing out on it.
   await deleteAllPhotos(userId).catch(() => {});
+  if (privatePhotos) await removePrivatePhotos(privatePhotos).catch(() => {});
   await signOut();
 }
 

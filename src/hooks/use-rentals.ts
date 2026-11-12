@@ -3,7 +3,14 @@ import { useMemo, useSyncExternalStore } from 'react';
 import { useListings } from '@/hooks/use-listings';
 import { useNow } from '@/hooks/use-now';
 import { listingMentions } from '@/lib/data/listings';
-import { getRentalsSnapshot, isOverdue, ordersFor, subscribeToRentals } from '@/lib/data/rentals';
+import {
+  getRentalsSnapshot,
+  isExpiredRequest,
+  isOverdue,
+  ordersFor,
+  subscribeToRentals,
+  toDateString,
+} from '@/lib/data/rentals';
 import { canReview, getReviewsSnapshot, subscribeToReviews } from '@/lib/data/reviews';
 import { getSalesSnapshot, saleOrdersFor, subscribeToSales } from '@/lib/data/sales';
 import type { Rental, Sale } from '@/lib/data/types';
@@ -87,7 +94,10 @@ export function useActivity(userId: string): ActivityItem[] {
       let include = true;
       switch (rental.status) {
         case 'requested':
-          if (role === 'lender') {
+          // A request whose pickup day passed can't happen anymore; it waits in Past instead.
+          if (isExpiredRequest(rental, toDateString(now))) {
+            include = false;
+          } else if (role === 'lender') {
             needsAction = 'Respond to request';
             priority = 1;
           }

@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Fonts, Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
 import { useNow } from '@/hooks/use-now';
+import { useOpenProposal } from '@/hooks/use-proposals';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser } from '@/hooks/use-users';
 import { getOrCreateConversation } from '@/lib/data/messages';
@@ -25,7 +26,24 @@ export function OrderCard({ rental, role }: { rental: Rental; role: Role }) {
   const otherId = role === 'borrower' ? rental.lenderId : rental.borrowerId;
   const other = useUser(otherId);
   const now = useNow();
-  const stage = orderStage(rental, now, role);
+  const proposal = useOpenProposal(rental.id);
+  const myId = role === 'borrower' ? rental.borrowerId : rental.lenderId;
+  // An open counter-offer or change of plans waiting on this person comes first.
+  const waitingOnMe = proposal !== undefined && proposal.proposerId !== myId;
+  const baseStage = orderStage(rental, now, role);
+  const stage = proposal
+    ? {
+        ...baseStage,
+        status: waitingOnMe
+          ? rental.status === 'requested'
+            ? 'Counter-offer to review'
+            : 'New plans to review'
+          : rental.status === 'requested'
+            ? 'Counter-offer sent'
+            : 'New plans sent',
+        tone: waitingOnMe ? ('accent' as const) : ('muted' as const),
+      }
+    : baseStage;
   const code = codeToShow(rental, role);
   const otherLabel = role === 'borrower' ? 'Lender' : 'Renter';
   const perDay = rental.offeredPricePerDay ?? listing?.pricePerDay;
@@ -42,7 +60,9 @@ export function OrderCard({ rental, role }: { rental: Rental; role: Role }) {
       otherLabel={otherLabel}
       code={code}
       primary={
-        rental.status === 'requested' && role === 'lender' ? { title: 'Review', onPress: openDetail } : undefined
+        waitingOnMe || (rental.status === 'requested' && role === 'lender' && !proposal)
+          ? { title: 'Review', onPress: openDetail }
+          : undefined
       }
       summary={
         <OrderSummary

@@ -4,11 +4,13 @@ import { useNow } from '@/hooks/use-now';
 import { useRentals } from '@/hooks/use-rentals';
 import {
   getBlocksSnapshot,
+  getOverturnedSnapshot,
   getReportsSnapshot,
   isBlockedBetween,
   penaltyFor,
   strikesFor,
   subscribeToBlocks,
+  subscribeToOverturned,
   subscribeToReports,
   type Penalty,
 } from '@/lib/data/moderation';
@@ -22,11 +24,19 @@ export function useBlocks() {
   return useSyncExternalStore(subscribeToBlocks, getBlocksSnapshot, getBlocksSnapshot);
 }
 
+function useOverturned() {
+  return useSyncExternalStore(subscribeToOverturned, getOverturnedSnapshot, getOverturnedSnapshot);
+}
+
 export function useStrikes(userId: string) {
   const rentals = useRentals();
   const reports = useReports();
+  const overturned = useOverturned();
   const now = useNow();
-  return useMemo(() => strikesFor(userId, rentals, reports, now), [userId, rentals, reports, now]);
+  return useMemo(
+    () => strikesFor(userId, rentals, reports, now, overturned),
+    [userId, rentals, reports, now, overturned]
+  );
 }
 
 export function usePenalty(userId: string): Penalty {
@@ -40,15 +50,16 @@ export function useRestrictedUserIds() {
   const users = useSyncExternalStore(subscribeToUsers, getUsersSnapshot, getUsersSnapshot);
   const rentals = useRentals();
   const reports = useReports();
+  const overturned = useOverturned();
   const now = useNow();
   return useMemo(() => {
     const restricted = new Set<string>();
     for (const user of users) {
-      const level = penaltyFor(strikesFor(user.id, rentals, reports, now), now).level;
+      const level = penaltyFor(strikesFor(user.id, rentals, reports, now, overturned), now).level;
       if (level === 'soft_ban' || level === 'banned') restricted.add(user.id);
     }
     return restricted;
-  }, [users, rentals, reports, now]);
+  }, [users, rentals, reports, overturned, now]);
 }
 
 /** Whether the viewer blocked this user, and whether either side blocked the other. */

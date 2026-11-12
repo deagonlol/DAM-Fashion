@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Link, router } from 'expo-router';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -20,6 +20,7 @@ import { useActivity, type ActivityItem } from '@/hooks/use-rentals';
 import { useSaleActivity, type SaleActivity } from '@/hooks/use-sales';
 import { useReviewsAbout } from '@/hooks/use-reviews';
 import { useCurrentUser } from '@/hooks/use-session';
+import { getAppealsSnapshot, subscribeToAppeals } from '@/lib/data/appeals';
 import { signOut, updateProfilePhoto } from '@/lib/data/auth';
 
 const SECTIONS = ['Closet', 'Borrowed', 'Reviews'] as const;
@@ -40,6 +41,9 @@ export default function ProfileScreen() {
   const lending = activityEntries(activity, saleActivity, 'lender');
   const borrowing = activityEntries(activity, saleActivity, 'borrower');
   const openReports = useReports().filter((report) => report.status === 'open').length;
+  const waitingAppeals = useSyncExternalStore(subscribeToAppeals, getAppealsSnapshot, getAppealsSnapshot).filter(
+    (appeal) => appeal.status === 'pending'
+  ).length;
   const [section, setSection] = useState<Section>('Closet');
 
   async function changePhoto() {
@@ -60,10 +64,23 @@ export default function ProfileScreen() {
         <RestrictionBanner />
         <Button title="List an item" onPress={() => router.push('/list')} />
         <View style={styles.row}>
-          <Button title="Edit profile" variant="secondary" style={styles.flex} onPress={() => router.push('/edit-profile')} />
+          <Button
+            title="Edit profile"
+            variant="secondary"
+            style={styles.flex}
+            onPress={() => router.push('/edit-profile')}
+          />
           <Button title="Sign out" variant="secondary" style={styles.flex} onPress={signOut} />
         </View>
         <View style={styles.legal}>
+          <Link href="/tour">
+            <ThemedText type="small" themeColor="textSecondary">
+              How Lendr works
+            </ThemedText>
+          </Link>
+          <ThemedText type="small" themeColor="textSecondary">
+            ·
+          </ThemedText>
           <Link href="/legal/terms">
             <ThemedText type="small" themeColor="textSecondary">
               Terms of Service
@@ -79,7 +96,10 @@ export default function ProfileScreen() {
           </Link>
         </View>
         {user.role === 'admin' ? (
-          <Button title={`Review reports (${openReports} open)`} onPress={() => router.push('/admin/reports')} />
+          <Button
+            title={`Review reports (${openReports} open${waitingAppeals > 0 ? `, ${waitingAppeals} appeals` : ''})`}
+            onPress={() => router.push('/admin/reports')}
+          />
         ) : null}
 
         {lending.length > 0 || borrowing.length > 0 ? (

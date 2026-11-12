@@ -37,6 +37,8 @@ export type User = {
   joinedAt: string;
   /** Lendr team members can review reports. */
   role?: 'admin';
+  /** When they're usually free to meet, e.g. "mon-evening". Empty means any time. */
+  pickupWindows?: string[];
 };
 
 export const MAX_BIO_LENGTH = 160;
@@ -51,6 +53,10 @@ export type Listing = {
   size: Size;
   /** Optional, e.g. "Levi's". Empty when the owner didn't say. */
   brand?: string;
+  /** Optional measurements, e.g. "Waist 28 in, length 40 in". */
+  measurements?: string;
+  /** Optional note on fit, e.g. "Runs small, fits like an XS". */
+  fitNote?: string;
   /** Where the lender will meet. Empty means any of the usual pickup spots. */
   pickupSpots?: PickupSpot[];
   pricePerDay: number;
@@ -72,6 +78,7 @@ export type Listing = {
 export type NewListing = Omit<Listing, 'id' | 'ownerId' | 'createdAt' | 'paused' | 'blockedDates' | 'soldAt'>;
 
 export const MAX_LISTING_PHOTOS = 6;
+export const MAX_FIT_DETAIL_LENGTH = 120;
 
 export const SORT_OPTIONS = ['For you', 'Newest', 'Most relevant', 'Price: low to high', 'Price: high to low'] as const;
 export type ListingSort = (typeof SORT_OPTIONS)[number];
@@ -108,7 +115,10 @@ export type Message = {
   id: string;
   conversationId: string;
   senderId: string;
+  /** Can be empty when the message is just a photo. */
   text: string;
+  /** Storage path of a photo in the private chat-photos bucket. */
+  imagePath?: string;
   createdAt: string;
 };
 
@@ -171,6 +181,40 @@ export type Rental = {
   conditionIssue?: string;
   /** Who reported the other person didn't show up for pickup. */
   noShowReportedBy?: string;
+};
+
+/** A photo of an item's condition, taken by either person at pickup or at return. */
+export type RentalPhoto = {
+  id: string;
+  rentalId: string;
+  uploaderId: string;
+  stage: 'pickup' | 'return';
+  /** Storage path in the private rental-photos bucket. */
+  path: string;
+  createdAt: string;
+};
+
+export const MAX_CONDITION_PHOTOS = 4;
+
+export type ProposalStatus = 'pending' | 'accepted' | 'declined' | 'withdrawn' | 'expired';
+
+/**
+ * A change to a borrow that one person proposed and the other has to accept: a lender's
+ * counter-offer on a waiting request, or new plans for a confirmed borrow.
+ */
+export type RentalProposal = {
+  id: string;
+  rentalId: string;
+  proposerId: string;
+  startDate: string;
+  endDate: string;
+  pickupTime?: string;
+  returnTime?: string;
+  pickupSpot: PickupSpot;
+  pricePerDay: number;
+  note: string;
+  status: ProposalStatus;
+  createdAt: string;
 };
 
 export type SaleStatus = 'requested' | 'accepted' | 'declined' | 'cancelled';
@@ -261,7 +305,32 @@ export type Report = {
   createdAt: string;
   status: 'open' | 'upheld' | 'dismissed';
   reviewedAt?: string;
+  /** Whether the team or the AI reviewer made the decision. */
+  decidedBy?: 'team' | 'ai';
+  /** The AI reviewer's notes: its decision or suggestion, and why. Team-only. */
+  aiNote?: string;
 };
+
+/** Someone asking for one of their strikes to be removed. Level 2 is a second, human review. */
+export type Appeal = {
+  id: string;
+  userId: string;
+  source: 'no_show' | 'late_return' | 'report';
+  refId: string;
+  reason: string;
+  level: 1 | 2;
+  status: 'pending' | 'approved' | 'denied';
+  decidedBy?: 'team' | 'ai';
+  /** Why it was decided, shown to the person. */
+  decisionNote?: string;
+  /** The AI reviewer's notes, for the team. */
+  aiNote?: string;
+  createdAt: string;
+  decidedAt?: string;
+};
+
+export const MIN_APPEAL_LENGTH = 10;
+export const MAX_APPEAL_LENGTH = 1000;
 
 /** One user blocking another: they can't see each other's listings, message, or borrow. */
 export type Block = {
