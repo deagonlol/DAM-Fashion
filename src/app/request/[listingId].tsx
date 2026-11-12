@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Button } from '@/components/button';
 import { ChipGroup } from '@/components/chip-group';
+import { PickupSpotRow, WalkingTimesPrompt } from '@/components/pickup-spots';
 import { RestrictionBanner } from '@/components/restriction-banner';
 import { TextField } from '@/components/text-field';
 import { TimePicker } from '@/components/time-picker';
@@ -188,6 +189,8 @@ export default function RequestBorrowScreen() {
                 The lender meets at these spots.
               </ThemedText>
             ) : null}
+            {pickupSpot ? <PickupSpotRow spot={pickupSpot} /> : null}
+            <WalkingTimesPrompt />
           </View>
 
           <View style={styles.section}>

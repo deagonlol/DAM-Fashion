@@ -1,4 +1,4 @@
--- DAM Fashion: photo storage.
+-- Lendr: photo storage.
 -- Two public buckets: anyone can view a photo by its URL (needed to show listings and avatars),
 -- but signed-in users can only upload, replace, or delete files inside their own folder:
 --   listing-photos/<user id>/<listing id>/<file>

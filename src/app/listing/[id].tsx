@@ -8,6 +8,7 @@ import { TopBadge } from '@/components/badge-row';
 import { Button } from '@/components/button';
 import { ListingCard } from '@/components/listing-card';
 import { PhotoCarousel } from '@/components/photo-carousel';
+import { PickupSpotList } from '@/components/pickup-spots';
 import { ReviewCard } from '@/components/review-card';
 import { SaveButton } from '@/components/save-button';
 import { ThemedText } from '@/components/themed-text';
@@ -225,9 +226,10 @@ export default function ListingDetailScreen() {
           ) : null}
 
           {listing.pickupSpots?.length ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              Pickup at {listing.pickupSpots.join(' or ')}
-            </ThemedText>
+            <View style={styles.section}>
+              <ThemedText type="smallBold">Pickup spots</ThemedText>
+              <PickupSpotList spots={listing.pickupSpots} />
+            </View>
           ) : null}
 
           {!listing.soldAt && listing.rentable !== false ? (

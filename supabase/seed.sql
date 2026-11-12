@@ -36,7 +36,7 @@ from (values
   ('u2', 'Ronit S.', 'ronit.damtest@utexas.edu'),
   ('u3', 'Maya L.', 'maya.damtest@utexas.edu'),
   ('u4', 'Jordan P.', 'jordan.damtest@utexas.edu'),
-  ('u5', 'DAM Team', 'admin.damtest@utexas.edu'),
+  ('u5', 'Lendr Team', 'admin.damtest@utexas.edu'),
   ('u6', 'Priya Patel', 'priya.damtest@utexas.edu'),
   ('u7', 'Marcus J.', 'marcus.damtest@utexas.edu'),
   ('u8', 'Sofia Hernandez', 'sofia.damtest@utexas.edu'),

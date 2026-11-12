@@ -1,4 +1,4 @@
--- DAM Fashion: initial schema.
+-- Lendr: initial schema.
 -- Mirrors src/lib/data/types.ts. Columns are snake_case; the data layer maps them to camelCase.
 --
 -- Security model:

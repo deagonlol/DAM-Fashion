@@ -6,6 +6,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { ConditionPhotos } from '@/components/condition-photos';
+import { PickupSpotRow, WalkingTimesPrompt } from '@/components/pickup-spots';
 import { ProposalCard } from '@/components/proposal-card';
 import { STATUS_LABELS } from '@/components/rental-row';
 import { ReviewCard } from '@/components/review-card';
@@ -150,6 +151,12 @@ export default function RentalScreen() {
               value={`${formatDay(rental.endDate)}${rental.returnTime ? `, ${formatTime(rental.returnTime)}` : ''}`}
             />
             <Detail label="Where" value={rental.pickupSpot} />
+            {rental.pickupSpot ? (
+              <>
+                <PickupSpotRow spot={rental.pickupSpot} />
+                <WalkingTimesPrompt />
+              </>
+            ) : null}
             {total !== null ? <Detail label="Total" value={formatPrice(total)} /> : null}
             <Pressable
               onPress={() => router.push(`/user/${other?.id ?? ''}`)}

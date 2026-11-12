@@ -1,4 +1,4 @@
--- DAM Fashion: rules enforced on the server, and the read functions the app uses.
+-- Lendr: rules enforced on the server, and the read functions the app uses.
 --
 -- The app keeps its rules as pure TypeScript (src/lib/data/*.ts) for instant feedback, but anyone
 -- with the publishable key can call the API directly, so everything that matters is re-checked

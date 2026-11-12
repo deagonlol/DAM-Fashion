@@ -13,7 +13,8 @@ import { Spacing } from '@/constants/theme';
 import { useListings } from '@/hooks/use-listings';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
-import { suggestedDailyPrice } from '@/lib/data/search';
+import { findSimilarListings, preparePhoto, rankByMatches, warmUpImageSearch } from '@/lib/data/image-search';
+import { suggestedDailyPrice, suggestedSalePrice, suggestFromLookalikes } from '@/lib/data/search';
 import { clearListingDraft, isDraftEmpty, loadListingDraft, saveListingDraft } from '@/lib/drafts';
 import { formatPrice } from '@/lib/format';
 import {
@@ -156,6 +157,57 @@ export function ListingForm({
 
   const suggestion =
     category && size && events.length > 0 ? suggestedDailyPrice(listings, { category, events, size, excludeId }) : null;
+  const saleSuggestion =
+    category && size && events.length > 0 ? suggestedSalePrice(listings, { category, events, size, excludeId }) : null;
+
+  // From the cover photo, find the listings that look most like it (TinyCLIP, on our own free
+  // server) and suggest a type and events from them. Only for new listings, and never overwrites.
+  const coverPhoto = imageUris[0];
+  const [lookalikeHint, setLookalikeHint] = useState<{
+    photo: string;
+    category: Category;
+    events: EventTag[];
+    count: number;
+  } | null>(null);
+  const [dismissedHintFor, setDismissedHintFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initial) return;
+    warmUpImageSearch();
+  }, [initial]);
+
+  useEffect(() => {
+    if (initial || !coverPhoto || /^https?:\/\//.test(coverPhoto)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const matches = await findSimilarListings(await preparePhoto(coverPhoto), 10);
+        const lookalikes = rankByMatches(listings, matches).slice(0, 5);
+        const hint = suggestFromLookalikes(lookalikes);
+        if (!cancelled && hint) setLookalikeHint({ photo: coverPhoto, ...hint, count: lookalikes.length });
+      } catch {
+        // Suggestions are a bonus; if photo search is asleep or offline, the form works as usual.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only the cover photo matters; the listings list changing shouldn't re-run the lookup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverPhoto, initial]);
+
+  const showLookalikeHint =
+    lookalikeHint !== null &&
+    lookalikeHint.photo === coverPhoto &&
+    dismissedHintFor !== coverPhoto &&
+    (category !== lookalikeHint.category || lookalikeHint.events.some((event) => !events.includes(event)));
+
+  function applyLookalikeHint() {
+    if (!lookalikeHint) return;
+    setCategory(lookalikeHint.category);
+    setEvents((current) => [...new Set([...current, ...lookalikeHint.events])]);
+    setDismissedHintFor(lookalikeHint.photo);
+  }
   const rents = offer !== 'Buy only';
   const sells = offer !== 'Rent';
   // Sell-only listings store a daily price of 0; it's never shown.
@@ -334,6 +386,32 @@ export function ListingForm({
               multiline
             />
 
+            {showLookalikeHint && lookalikeHint ? (
+              <View style={[styles.hint, { backgroundColor: theme.backgroundElement, borderColor: theme.accent }]}>
+                <ThemedText type="small" style={styles.flex}>
+                  Looks like{' '}
+                  <ThemedText type="smallBold">
+                    {[lookalikeHint.category, ...lookalikeHint.events].join(' · ')}
+                  </ThemedText>{' '}
+                  (from {lookalikeHint.count} similar listings)
+                </ThemedText>
+                <Pressable onPress={applyLookalikeHint} accessibilityRole="button" hitSlop={8}>
+                  <ThemedText type="smallBold" themeColor="accent">
+                    Use these
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => setDismissedHintFor(lookalikeHint.photo)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss suggestion"
+                  hitSlop={8}>
+                  <ThemedText type="smallBold" themeColor="textSecondary">
+                    ✕
+                  </ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
+
             <Field label="Type">
               <ChipGroup options={CATEGORIES} value={category} onChange={setCategory} />
             </Field>
@@ -411,6 +489,16 @@ export function ListingForm({
                     ? 'What someone pays to keep it. Has to be higher than the daily rate.'
                     : 'What someone pays to keep it. It won’t be offered for rent.'}
                 </ThemedText>
+                {saleSuggestion !== null ? (
+                  <Pressable
+                    onPress={() => setSalePrice(String(saleSuggestion))}
+                    accessibilityRole="button"
+                    hitSlop={8}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Similar items sell for about {formatPrice(saleSuggestion)}. Tap to use it.
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
               </>
             ) : null}
 
@@ -443,6 +531,14 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  hint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: Spacing.three,
   },
   draftNotice: {
     flexDirection: 'row',

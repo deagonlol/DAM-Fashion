@@ -4,6 +4,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Chip } from '@/components/chip-group';
+import { ComingUp } from '@/components/coming-up';
 import { ListingCard } from '@/components/listing-card';
 import { ProfileButton } from '@/components/profile-button';
 import { SearchBar, SearchBarButton } from '@/components/search-bar';
@@ -98,6 +99,7 @@ export default function HomeScreen() {
                 </>
               }
             />
+            <ComingUp />
           </View>
 
           <View style={styles.section}>

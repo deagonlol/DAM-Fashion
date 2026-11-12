@@ -22,10 +22,45 @@ export type Taste = {
 const EMPTY_INTENT: SearchIntent = { categories: [], events: [], sizes: [], maxPrice: null, words: [] };
 
 const STOP_WORDS = new Set([
-  'a', 'an', 'the', 'for', 'to', 'and', 'or', 'with', 'in', 'of', 'on', 'my', 'me', 'i',
-  'want', 'looking', 'something', 'wear', 'wearing', 'show', 'find', 'need', 'please',
-  'some', 'day', 'per', 'good', 'great', 'outfit', 'clothes', 'clothing', 'item', 'items', 'size',
-  'under', 'below', 'less', 'than', 'up',
+  'a',
+  'an',
+  'the',
+  'for',
+  'to',
+  'and',
+  'or',
+  'with',
+  'in',
+  'of',
+  'on',
+  'my',
+  'me',
+  'i',
+  'want',
+  'looking',
+  'something',
+  'wear',
+  'wearing',
+  'show',
+  'find',
+  'need',
+  'please',
+  'some',
+  'day',
+  'per',
+  'good',
+  'great',
+  'outfit',
+  'clothes',
+  'clothing',
+  'item',
+  'items',
+  'size',
+  'under',
+  'below',
+  'less',
+  'than',
+  'up',
 ]);
 
 /** Longer phrases first so "semi formal" is taken before "formal". */
@@ -199,8 +234,55 @@ export function suggestedDailyPrice(
   const sized = comps.filter((listing) => listing.size === input.size);
   const pool = sized.length >= 3 ? sized : comps;
   if (pool.length < 3) return null;
-  const prices = pool.map((listing) => listing.pricePerDay).sort((a, b) => a - b);
-  const mid = Math.floor(prices.length / 2);
-  const median = prices.length % 2 === 1 ? prices[mid] : (prices[mid - 1] + prices[mid]) / 2;
-  return Math.round(median);
+  return Math.round(median(pool.map((listing) => listing.pricePerDay)));
+}
+
+function median(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Median sale price of similar listings that can be bought (or were sold): same type and a
+ * shared event, at least three of them. Uses the same size when three of those exist.
+ */
+export function suggestedSalePrice(
+  listings: Listing[],
+  input: { category: Category; events: EventTag[]; size: Size; excludeId?: string }
+): number | null {
+  if (input.events.length === 0) return null;
+  const comps = listings.filter(
+    (listing) =>
+      listing.id !== input.excludeId &&
+      listing.salePrice != null &&
+      listing.category === input.category &&
+      listing.events.some((event) => input.events.includes(event))
+  );
+  const sized = comps.filter((listing) => listing.size === input.size);
+  const pool = sized.length >= 3 ? sized : comps;
+  if (pool.length < 3) return null;
+  return Math.round(median(pool.map((listing) => listing.salePrice!)));
+}
+
+/**
+ * What a new listing probably is, from the listings that look most like its photo: the type
+ * most of them share, and events at least two of them have. Nothing when there's no clear type.
+ */
+export function suggestFromLookalikes(lookalikes: Listing[]): { category: Category; events: EventTag[] } | null {
+  if (lookalikes.length < 2) return null;
+  const counts = new Map<Category, number>();
+  for (const listing of lookalikes) counts.set(listing.category, (counts.get(listing.category) ?? 0) + 1);
+  const [category, votes] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+  // A clear majority, or at least two that agree when there are only a few.
+  if (votes < 2 || votes * 2 < lookalikes.length) return null;
+  const eventCounts = new Map<EventTag, number>();
+  for (const listing of lookalikes.filter((item) => item.category === category)) {
+    for (const event of listing.events) eventCounts.set(event, (eventCounts.get(event) ?? 0) + 1);
+  }
+  const events = [...eventCounts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .map(([event]) => event);
+  return { category, events };
 }

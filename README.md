@@ -2,7 +2,7 @@
 
 Borrow and lend clothes with other UT Austin students: game day fits, formals, costumes, career fair outfits. Built by a Texas Convergent team.
 
-> "Lendr" is the working name. The repo and some internal names still say DAM Fashion.
+> "Lendr" is the working name. The GitHub repo and the Linear workspace are still named DAM Fashion.
 
 ## Features
 

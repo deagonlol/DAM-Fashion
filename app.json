@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "Lendr",
-    "slug": "DAM-Fashion",
+    "slug": "lendr",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "damfashion",
+    "scheme": "lendr",
     "userInterfaceStyle": "dark",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -39,6 +39,12 @@
           "photosPermission": "Lendr uses your photos so you can list clothing.",
           "cameraPermission": "Lendr uses your camera so you can search for clothes with a photo.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lendr uses your location only to show how far each campus pickup spot is."
         }
       ]
     ],

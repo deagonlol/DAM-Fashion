@@ -1,4 +1,11 @@
-import { forYouScore, parseSearchQuery, suggestedDailyPrice, tasteFromListings } from '../search';
+import {
+  forYouScore,
+  parseSearchQuery,
+  suggestedDailyPrice,
+  suggestedSalePrice,
+  suggestFromLookalikes,
+  tasteFromListings,
+} from '../search';
 import type { Listing } from '../types';
 
 function listing(overrides: Partial<Listing> & Pick<Listing, 'id'>): Listing {
@@ -87,16 +94,58 @@ describe('suggestedDailyPrice', () => {
   });
 
   it('ignores the listing being edited and paused listings', () => {
-    const listings = [
-      formal('edit', 1),
-      formal('paused', 1),
-      formal('a', 10),
-      formal('b', 12),
-      formal('c', 14),
-    ];
+    const listings = [formal('edit', 1), formal('paused', 1), formal('a', 10), formal('b', 12), formal('c', 14)];
     listings[1].paused = true;
     expect(
       suggestedDailyPrice(listings, { category: 'Dresses', events: ['Formal'], size: 'S', excludeId: 'edit' })
     ).toBe(12);
+  });
+});
+
+describe('listing suggestions', () => {
+  const item = (overrides: Partial<Listing> & Pick<Listing, 'id'>): Listing => ({
+    ownerId: 'owner',
+    title: 'Item',
+    description: '',
+    category: 'Dresses',
+    events: ['Formal'],
+    size: 'S',
+    pricePerDay: 10,
+    imageUris: [],
+    createdAt: '2026-11-01T00:00:00Z',
+    ...overrides,
+  });
+
+  it('suggests the type most lookalikes share, and events at least two of them have', () => {
+    const lookalikes = [
+      item({ id: 'a', events: ['Formal', 'Semi-Formal'] }),
+      item({ id: 'b', events: ['Formal'] }),
+      item({ id: 'c', events: ['Semi-Formal', 'Graduation'] }),
+      item({ id: 'd', category: 'Tops', events: ['Game Day'] }),
+    ];
+    expect(suggestFromLookalikes(lookalikes)).toEqual({ category: 'Dresses', events: ['Formal', 'Semi-Formal'] });
+  });
+
+  it('suggests nothing without a clear type', () => {
+    expect(suggestFromLookalikes([item({ id: 'a' })])).toBeNull();
+    expect(
+      suggestFromLookalikes([
+        item({ id: 'a' }),
+        item({ id: 'b', category: 'Tops' }),
+        item({ id: 'c', category: 'Shoes' }),
+        item({ id: 'd', category: 'Outerwear' }),
+      ])
+    ).toBeNull();
+  });
+
+  it('suggests a sale price from similar items with one', () => {
+    const comps = [
+      item({ id: 'a', salePrice: 30 }),
+      item({ id: 'b', salePrice: 40 }),
+      item({ id: 'c', salePrice: 60 }),
+      item({ id: 'd' }),
+    ];
+    expect(suggestedSalePrice(comps, { category: 'Dresses', events: ['Formal'], size: 'S' })).toBe(40);
+    expect(suggestedSalePrice(comps.slice(0, 2), { category: 'Dresses', events: ['Formal'], size: 'S' })).toBeNull();
   });
 });
