@@ -5,6 +5,7 @@ import {
   suggestedSalePrice,
   suggestFromLookalikes,
   tasteFromListings,
+  tasteFromSignals,
 } from '../search';
 import type { Listing } from '../types';
 
@@ -147,5 +148,26 @@ describe('listing suggestions', () => {
     ];
     expect(suggestedSalePrice(comps, { category: 'Dresses', events: ['Formal'], size: 'S' })).toBe(40);
     expect(suggestedSalePrice(comps.slice(0, 2), { category: 'Dresses', events: ['Formal'], size: 'S' })).toBeNull();
+  });
+});
+
+describe('tasteFromSignals', () => {
+  it('ranks what matches your hearts above what matches your own listings', () => {
+    const taste = tasteFromSignals({
+      saved: [listing({ id: 's', category: 'Dresses', events: ['Formal'] })],
+      shelved: [],
+      borrowed: [],
+      owned: [listing({ id: 'o', category: 'Tops', events: ['Game Day'] })],
+    });
+    const formal = listing({ id: 'a', category: 'Dresses', events: ['Formal'] });
+    const gameDay = listing({ id: 'b', category: 'Tops', events: ['Game Day'] });
+    expect(forYouScore(formal, taste, [])).toBeGreaterThan(forYouScore(gameDay, taste, []));
+  });
+
+  it('puts pieces you already hearted after new ones that match', () => {
+    const saved = listing({ id: 's', category: 'Dresses', events: ['Formal'] });
+    const taste = tasteFromSignals({ saved: [saved], shelved: [], borrowed: [], owned: [] });
+    const fresh = listing({ id: 'n', category: 'Dresses', events: ['Formal'] });
+    expect(forYouScore(fresh, taste, [])).toBeGreaterThan(forYouScore(saved, taste, []));
   });
 });

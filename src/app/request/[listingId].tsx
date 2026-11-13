@@ -8,6 +8,7 @@ import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Button } from '@/components/button';
 import { ChipGroup } from '@/components/chip-group';
 import { PickupSpotRow, WalkingTimesPrompt } from '@/components/pickup-spots';
+import { PriceBreakdown } from '@/components/price-breakdown';
 import { RestrictionBanner } from '@/components/restriction-banner';
 import { TextField } from '@/components/text-field';
 import { TimePicker } from '@/components/time-picker';
@@ -26,6 +27,7 @@ import {
   MAX_RENTAL_DAYS,
   openOfferCount,
   pickRange,
+  dragRange,
   rangesOverlap,
   rentalDays,
   requestBorrow,
@@ -33,6 +35,7 @@ import {
   type DateRange,
 } from '@/lib/data/rentals';
 import { PICKUP_SPOTS, type PickupSpot } from '@/lib/data/types';
+import { rentalPrice } from '@/lib/fees';
 import { formatDay, formatPrice, formatPricePerDay, formatTime } from '@/lib/format';
 
 /** Pick dates on the calendar, a pickup spot and times, then send a borrow request to the lender. */
@@ -43,6 +46,8 @@ export default function RequestBorrowScreen() {
   const user = useCurrentUser();
   const theme = useTheme();
   const [range, setRange] = useState<DateRange | null>(null);
+  // While a finger slides across the calendar, the page holds still.
+  const [draggingDates, setDraggingDates] = useState(false);
   const [pickupSpot, setPickupSpot] = useState<PickupSpot | null>(null);
   const [pickupTime, setPickupTime] = useState<string | null>(null);
   const [returnTime, setReturnTime] = useState<string | null>(null);
@@ -89,6 +94,7 @@ export default function RequestBorrowScreen() {
   const offeredPricePerDay = Number(offerText);
   const offerOk =
     Number.isFinite(offeredPricePerDay) && listing !== undefined && offeredPricePerDay >= listing.pricePerDay;
+  const dayPrice = offerOk ? offeredPricePerDay : listing.pricePerDay;
   const competing =
     listing && startDate && endDate ? openOfferCount(rentals, listing.id, startDate, endDate, user.id) : 0;
   // Times that have already passed today can't be picked.
@@ -138,6 +144,7 @@ export default function RequestBorrowScreen() {
       <Stack.Screen options={{ title: 'Rent' }} />
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
+          scrollEnabled={!draggingDates}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="automatic">
@@ -174,6 +181,8 @@ export default function RequestBorrowScreen() {
               blockedDates={new Set(ownerBlocked)}
               selected={range}
               onSelectDay={(date) => setRange((current) => pickRange(current, date, isFree))}
+              onDragRange={(anchor, date) => setRange(dragRange(anchor, date, isFree))}
+              onDragChange={setDraggingDates}
             />
           </View>
 
@@ -247,22 +256,18 @@ export default function RequestBorrowScreen() {
           />
 
           <View style={[styles.summary, { backgroundColor: theme.backgroundElement }]}>
-            <View style={styles.totalRow}>
-              <View style={styles.flex}>
-                <ThemedText style={styles.heading}>Total cost</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {range
-                    ? `${formatPrice(offerOk ? offeredPricePerDay : listing.pricePerDay)}/day × ${days} ${days === 1 ? 'day' : 'days'}`
-                    : 'Price per day × days renting'}
-                </ThemedText>
-              </View>
-              <ThemedText style={styles.total}>
-                {range ? formatPrice((offerOk ? offeredPricePerDay : listing.pricePerDay) * days) : '$'}
+            <ThemedText style={styles.heading}>Total cost</ThemedText>
+            {range ? (
+              <PriceBreakdown
+                role="payer"
+                label={`${formatPrice(dayPrice)}/day × ${days} ${days === 1 ? 'day' : 'days'}`}
+                price={rentalPrice(dayPrice, days)}
+              />
+            ) : (
+              <ThemedText type="small" themeColor="textSecondary">
+                Pick dates to see the price per day × days renting, plus Lendr’s service fee.
               </ThemedText>
-            </View>
-            <ThemedText type="small" themeColor="textSecondary">
-              In-app payment is coming soon. For now, settle up at pickup.
-            </ThemedText>
+            )}
           </View>
 
           {error ? (
@@ -327,16 +332,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: Spacing.three,
     gap: Spacing.two,
-  },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-  },
-  total: {
-    fontFamily: Fonts.heading,
-    fontSize: 24,
-    lineHeight: 30,
   },
   footer: {
     padding: Spacing.three,

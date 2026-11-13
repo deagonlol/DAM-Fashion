@@ -2,27 +2,18 @@ import {
   NotoSansTamil_400Regular,
   NotoSansTamil_500Medium,
   NotoSansTamil_600SemiBold,
-} from "@expo-google-fonts/noto-sans-tamil";
-import { Outfit_700Bold, useFonts } from "@expo-google-fonts/outfit";
-import { DarkTheme, Stack, ThemeProvider, type Theme } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useSyncExternalStore } from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+} from '@expo-google-fonts/noto-sans-tamil';
+import { Outfit_700Bold, useFonts } from '@expo-google-fonts/outfit';
+import { DarkTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect, useSyncExternalStore } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 
-import { Colors, Fonts } from "@/constants/theme";
-import { useSession } from "@/hooks/use-session";
-import {
-  getAuthReadySnapshot,
-  restoreSession,
-  subscribeToAuthReady,
-} from "@/lib/data/auth";
+import { Colors, Fonts } from '@/constants/theme';
+import { useScheduleReminders } from '@/hooks/use-notices';
+import { useSession } from '@/hooks/use-session';
+import { getAuthReadySnapshot, restoreSession, subscribeToAuthReady } from '@/lib/data/auth';
 
 SplashScreen.preventAutoHideAsync();
 restoreSession();
@@ -43,11 +34,7 @@ const navigationTheme: Theme = {
 export default function RootLayout() {
   const session = useSession();
   const signedIn = session !== null;
-  const authReady = useSyncExternalStore(
-    subscribeToAuthReady,
-    getAuthReadySnapshot,
-    getAuthReadySnapshot,
-  );
+  const authReady = useSyncExternalStore(subscribeToAuthReady, getAuthReadySnapshot, getAuthReadySnapshot);
   const [fontsLoaded, fontError] = useFonts({
     Outfit_700Bold,
     NotoSansTamil_400Regular,
@@ -67,7 +54,7 @@ export default function RootLayout() {
   // render anyway with the system font rather than hang. Web has no splash screen, so it
   // shows a simple loading screen instead of a blank page.
   if (!fontsReady || !authReady) {
-    return Platform.OS === "web" ? (
+    return Platform.OS === 'web' ? (
       <View style={styles.loading}>
         <Text style={styles.loadingName}>Lendr</Text>
         <ActivityIndicator color={Colors.background} />
@@ -78,6 +65,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={navigationTheme}>
       <StatusBar style="light" />
+      {signedIn ? <ReminderSync /> : null}
       {/* In a laptop browser, keep the app phone-sized instead of stretching across the window. */}
       <View style={styles.page}>
         <View style={[styles.frame, { borderColor: Colors.border }]}>
@@ -87,97 +75,59 @@ export default function RootLayout() {
               headerTintColor: Colors.text,
               headerStyle: { backgroundColor: Colors.background },
               contentStyle: { backgroundColor: Colors.background },
-            }}
-          >
+            }}>
             <Stack.Protected guard={signedIn}>
-              <Stack.Screen
-                name="(tabs)"
-                options={{ headerShown: false, title: "Back" }}
-              />
-              <Stack.Screen name="profile" options={{ title: "Profile" }} />
-              <Stack.Screen name="list" options={{ title: "List an item" }} />
-              <Stack.Screen name="search" options={{ title: "Search" }} />
-              <Stack.Screen name="listing/[id]" options={{ title: "" }} />
-              <Stack.Screen name="chat/[id]" options={{ title: "" }} />
-              <Stack.Screen name="user/[id]" options={{ title: "" }} />
-              <Stack.Screen
-                name="request/[listingId]"
-                options={{ title: "Rent" }}
-              />
-              <Stack.Screen
-                name="buy/[listingId]"
-                options={{ title: "Request to buy" }}
-              />
-              <Stack.Screen name="sale/[id]" options={{ title: "" }} />
-              <Stack.Screen name="rental/[id]" options={{ title: "" }} />
-              <Stack.Screen
-                name="review/[rentalId]"
-                options={{ title: "Review", presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="edit-profile"
-                options={{ title: "Edit profile", presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="manage/[listingId]"
-                options={{ title: "Manage listing" }}
-              />
-              <Stack.Screen
-                name="edit-listing/[listingId]"
-                options={{ title: "Edit listing" }}
-              />
-              <Stack.Screen
-                name="report/[userId]"
-                options={{ title: "Report", presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="admin/reports"
-                options={{ title: "Reports" }}
-              />
-              <Stack.Screen name="shelf/[id]" options={{ title: "" }} />
-              <Stack.Screen name="strikes" options={{ title: "Your strikes" }} />
-              <Stack.Screen
-                name="tour"
-                options={{ headerShown: false, presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="propose/[rentalId]"
-                options={{ title: "Change plans", presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="shelf/name"
-                options={{ title: "New shelf", presentation: "modal" }}
-              />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'Back' }} />
+              <Stack.Screen name="profile" options={{ title: 'Profile' }} />
+              <Stack.Screen name="list" options={{ title: 'List an item' }} />
+              <Stack.Screen name="search" options={{ title: 'Search' }} />
+              <Stack.Screen name="listing/[id]" options={{ title: '' }} />
+              <Stack.Screen name="chat/[id]" options={{ title: '' }} />
+              <Stack.Screen name="user/[id]" options={{ title: '' }} />
+              <Stack.Screen name="request/[listingId]" options={{ title: 'Rent' }} />
+              <Stack.Screen name="buy/[listingId]" options={{ title: 'Request to buy' }} />
+              <Stack.Screen name="sale/[id]" options={{ title: '' }} />
+              <Stack.Screen name="rental/[id]" options={{ title: '' }} />
+              <Stack.Screen name="review/[rentalId]" options={{ title: 'Review', presentation: 'modal' }} />
+              <Stack.Screen name="edit-profile" options={{ title: 'Edit profile', presentation: 'modal' }} />
+              <Stack.Screen name="edit-listing/[listingId]" options={{ title: 'Edit listing' }} />
+              <Stack.Screen name="report/[userId]" options={{ title: 'Report', presentation: 'modal' }} />
+              <Stack.Screen name="admin/reports" options={{ title: 'Reports' }} />
+              <Stack.Screen name="shelf/[id]" options={{ title: '' }} />
+              <Stack.Screen name="strikes" options={{ title: 'Your strikes' }} />
+              <Stack.Screen name="saved" options={{ title: 'All saved' }} />
+              <Stack.Screen name="drafts" options={{ title: 'Drafts' }} />
+              <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+              <Stack.Screen name="tour" options={{ headerShown: false, presentation: 'modal' }} />
+              <Stack.Screen name="propose/[rentalId]" options={{ title: 'Change plans', presentation: 'modal' }} />
+              <Stack.Screen name="shelf/name" options={{ title: 'New shelf', presentation: 'modal' }} />
               <Stack.Screen
                 name="add-to-shelf/[listingId]"
-                options={{ title: "Add to shelf", presentation: "modal" }}
+                options={{ title: 'Add to shelf', presentation: 'modal' }}
               />
             </Stack.Protected>
 
             {/* Readable whether or not someone is signed in. */}
-            <Stack.Screen name="legal/[doc]" options={{ title: "" }} />
+            <Stack.Screen name="legal/[doc]" options={{ title: '' }} />
 
             <Stack.Protected guard={!signedIn}>
-              <Stack.Screen
-                name="welcome"
-                options={{ headerShown: false, title: "Back" }}
-              />
-              <Stack.Screen name="sign-in" options={{ title: "Log in" }} />
-              <Stack.Screen name="sign-up" options={{ title: "Sign up" }} />
-              <Stack.Screen
-                name="forgot-password"
-                options={{ title: "Reset password" }}
-              />
-              <Stack.Screen
-                name="confirm-email"
-                options={{ title: "Confirm email" }}
-              />
+              {/* Opening the app signed out lands straight on log in, like Pinterest. */}
+              <Stack.Screen name="sign-in" options={{ headerShown: false, title: 'Log in' }} />
+              <Stack.Screen name="sign-up" options={{ title: 'Sign up' }} />
+              <Stack.Screen name="forgot-password" options={{ title: 'Reset password' }} />
+              <Stack.Screen name="confirm-email" options={{ title: 'Confirm email' }} />
             </Stack.Protected>
           </Stack>
         </View>
       </View>
     </ThemeProvider>
   );
+}
+
+/** Schedules phone alerts once someone is signed in. Renders nothing. */
+function ReminderSync() {
+  useScheduleReminders();
+  return null;
 }
 
 const styles = StyleSheet.create({
@@ -188,9 +138,9 @@ const styles = StyleSheet.create({
   frame: Platform.select({
     web: {
       flex: 1,
-      width: "100%",
+      width: '100%',
       maxWidth: 480,
-      alignSelf: "center",
+      alignSelf: 'center',
       borderLeftWidth: StyleSheet.hairlineWidth,
       borderRightWidth: StyleSheet.hairlineWidth,
     },
@@ -198,14 +148,14 @@ const styles = StyleSheet.create({
   }),
   loading: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 16,
     backgroundColor: Colors.accent,
   },
   loadingName: {
     fontSize: 40,
-    fontWeight: "700",
+    fontWeight: '700',
     color: Colors.background,
   },
 });

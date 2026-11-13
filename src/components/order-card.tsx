@@ -272,7 +272,7 @@ function OrderSummary({ title, imageUri, person, detail, status, tone, next }: O
       <Image
         source={imageUri}
         style={[styles.image, { backgroundColor: theme.background }]}
-        contentFit="contain"
+        contentFit="cover"
         transition={150}
       />
       <View style={styles.info}>

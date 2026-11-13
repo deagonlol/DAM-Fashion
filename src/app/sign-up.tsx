@@ -55,7 +55,7 @@ export default function SignUpScreen() {
               </ThemedText>
             </Link>
             .{'\n\n'}Already have an account?{' '}
-            <Link href="/sign-in" replace>
+            <Link href="/sign-in" dismissTo>
               <ThemedText type="smallBold" themeColor="accent">
                 Log in
               </ThemedText>

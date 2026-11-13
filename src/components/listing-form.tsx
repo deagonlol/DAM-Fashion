@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { SymbolView } from 'expo-symbols';
 import { useEffect, useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +16,7 @@ import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { findSimilarListings, preparePhoto, rankByMatches, warmUpImageSearch } from '@/lib/data/image-search';
 import { suggestedDailyPrice, suggestedSalePrice, suggestFromLookalikes } from '@/lib/data/search';
-import { clearListingDraft, isDraftEmpty, loadListingDraft, saveListingDraft } from '@/lib/drafts';
+import { deleteListingDraft, loadListingDraft, newDraftId, saveListingDraft } from '@/lib/drafts';
 import { formatPrice } from '@/lib/format';
 import {
   CATEGORIES,
@@ -49,6 +50,12 @@ type ListingFormProps = {
   banner?: ReactNode;
   /** Listing being edited, so its own price is not used as a comparison. */
   excludeId?: string;
+  /** A saved draft to pick back up. Without one, a new listing starts blank as a new draft. */
+  draftId?: string;
+  /** Extra sections under the details, before the save button (availability when editing). */
+  children?: ReactNode;
+  /** Shown under the save button, e.g. a red delete. */
+  footer?: ReactNode;
 };
 
 /** Photos, details, and price for a listing. Used to create and to edit. */
@@ -61,6 +68,9 @@ export function ListingForm({
   safeAreaTop = false,
   banner,
   excludeId,
+  draftId: resumeId,
+  children,
+  footer,
 }: ListingFormProps) {
   const theme = useTheme();
   const listings = useListings();
@@ -82,18 +92,20 @@ export function ListingForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // New listings keep a draft on the device, so leaving the form doesn't lose it.
+  // New listings keep a draft on the device, so leaving the form doesn't lose it. Each new form is
+  // its own draft; tapping a draft in the closet opens the form with that one.
   const user = useCurrentUser();
   const draftsOn = !initial;
-  const [draftReady, setDraftReady] = useState(!draftsOn);
+  const [draftId, setDraftId] = useState(() => resumeId ?? newDraftId());
+  const [draftReady, setDraftReady] = useState(!draftsOn || !resumeId);
   const [restoredDraft, setRestoredDraft] = useState(false);
 
   useEffect(() => {
-    if (!draftsOn) return;
+    if (!draftsOn || !resumeId) return;
     let cancelled = false;
-    void loadListingDraft(user.id).then((draft) => {
+    void loadListingDraft(user.id, resumeId).then((draft) => {
       if (cancelled) return;
-      if (draft && !isDraftEmpty(draft)) {
+      if (draft) {
         setImageUris(draft.imageUris);
         setTitle(draft.title);
         setDescription(draft.description);
@@ -114,12 +126,12 @@ export function ListingForm({
     return () => {
       cancelled = true;
     };
-  }, [draftsOn, user.id]);
+  }, [draftsOn, resumeId, user.id]);
 
   useEffect(() => {
     if (!draftsOn || !draftReady) return;
     const timer = setTimeout(() => {
-      void saveListingDraft(user.id, {
+      void saveListingDraft(user.id, draftId, {
         imageUris,
         title,
         description,
@@ -140,6 +152,7 @@ export function ListingForm({
     draftsOn,
     draftReady,
     user.id,
+    draftId,
     imageUris,
     title,
     description,
@@ -236,6 +249,20 @@ export function ListingForm({
     }
   }
 
+  async function takePhoto() {
+    setError(null);
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setError('Allow camera access in Settings to take photos here.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (!result.canceled && result.assets[0]?.uri) {
+      const uri = result.assets[0].uri;
+      setImageUris((current) => [...current, uri].slice(0, MAX_LISTING_PHOTOS));
+    }
+  }
+
   function removePhoto(index: number) {
     setImageUris((current) => current.filter((_, i) => i !== index));
   }
@@ -281,10 +308,13 @@ export function ListingForm({
         rentable: rents,
       });
       if (draftsOn) {
-        void clearListingDraft(user.id);
+        void deleteListingDraft(user.id, draftId);
         setRestoredDraft(false);
       }
-      if (resetOnSubmit) resetForm();
+      if (resetOnSubmit) {
+        resetForm();
+        setDraftId(newDraftId());
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
     } finally {
@@ -305,18 +335,20 @@ export function ListingForm({
             {restoredDraft ? (
               <View style={[styles.draftNotice, { backgroundColor: theme.backgroundElement }]}>
                 <ThemedText type="small" style={styles.flex}>
-                  Picked up your draft where you left off.
+                  Draft · saves on this phone as you go.
                 </ThemedText>
                 <Pressable
                   onPress={() => {
+                    void deleteListingDraft(user.id, draftId);
                     resetForm();
                     setRestoredDraft(false);
-                    void clearListingDraft(user.id);
+                    setDraftId(newDraftId());
                   }}
                   accessibilityRole="button"
+                  accessibilityHint="Deletes this draft for good"
                   hitSlop={8}>
-                  <ThemedText type="smallBold" themeColor="accent">
-                    Start over
+                  <ThemedText type="smallBold" themeColor="danger">
+                    Delete draft
                   </ThemedText>
                 </Pressable>
               </View>
@@ -334,7 +366,7 @@ export function ListingForm({
                       <Image
                         source={uri}
                         style={[StyleSheet.absoluteFill, { backgroundColor: theme.backgroundElement }]}
-                        contentFit="contain"
+                        contentFit="cover"
                       />
                     </Pressable>
                     {index === 0 ? (
@@ -357,13 +389,36 @@ export function ListingForm({
                   </View>
                 ))}
                 {photosLeft > 0 ? (
-                  <Pressable
-                    onPress={addPhotos}
-                    accessibilityRole="button"
-                    accessibilityLabel="Add photos"
-                    style={[styles.photo, styles.addPhoto, { borderColor: theme.border }]}>
-                    <ThemedText themeColor="textSecondary">+ Add</ThemedText>
-                  </Pressable>
+                  <>
+                    <Pressable
+                      onPress={takePhoto}
+                      accessibilityRole="button"
+                      accessibilityLabel="Take a photo"
+                      style={[styles.photo, styles.addPhoto, { borderColor: theme.border }]}>
+                      <SymbolView
+                        name={{ ios: 'camera', android: 'photo_camera', web: 'photo_camera' }}
+                        tintColor={theme.accent}
+                        size={24}
+                      />
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Camera
+                      </ThemedText>
+                    </Pressable>
+                    <Pressable
+                      onPress={addPhotos}
+                      accessibilityRole="button"
+                      accessibilityLabel="Choose photos from library"
+                      style={[styles.photo, styles.addPhoto, { borderColor: theme.border }]}>
+                      <SymbolView
+                        name={{ ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' }}
+                        tintColor={theme.accent}
+                        size={24}
+                      />
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Library
+                      </ThemedText>
+                    </Pressable>
+                  </>
                 ) : null}
               </ScrollView>
               <ThemedText type="small" themeColor="textSecondary">
@@ -508,7 +563,9 @@ export function ListingForm({
               </ThemedText>
             ) : null}
 
+            {children}
             <Button title={submitLabel} onPress={handleSubmit} disabled={!isValid || submitting} />
+            {footer}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -566,6 +623,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: Spacing.one,
   },
   coverTag: {
     position: 'absolute',

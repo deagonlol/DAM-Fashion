@@ -4,12 +4,14 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { PriceBreakdown } from '@/components/price-breakdown';
 import { RestrictionBanner } from '@/components/restriction-banner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useListing } from '@/hooks/use-listings';
 import { requestSale } from '@/lib/data/sales';
+import { salePrice } from '@/lib/fees';
 import { formatPrice, formatPricePerDay } from '@/lib/format';
 
 /** Confirm a buy at the listed sale price. The seller accepts or declines. */
@@ -51,8 +53,9 @@ export default function BuyScreen() {
             Buy it for {formatPrice(listing.salePrice)}. It also rents for {formatPricePerDay(listing.pricePerDay)}.
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            The seller accepts or declines. No payment in the app. If they accept, the item is marked sold.
+            The seller accepts or declines. If they accept, the item is marked sold.
           </ThemedText>
+          <PriceBreakdown role="payer" label="Item price" price={salePrice(listing.salePrice)} />
           {error ? (
             <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">
               {error}

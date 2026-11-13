@@ -1,11 +1,12 @@
 import { Link } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AuthForm } from '@/components/auth-form';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Fonts, Spacing } from '@/constants/theme';
 import { AuthError, ConfirmEmailError, signIn } from '@/lib/data/auth';
 
 const TEST_EMAIL = 'alex.damtest@utexas.edu';
@@ -38,9 +39,20 @@ export default function SignInScreen() {
       submitTitle="Log in"
       canSubmit={email.length > 0 && password.length > 0 && !submitting}
       onSubmit={() => enter(email, password)}
-      secondaryTitle="Skip login"
-      onSecondary={() => enter(TEST_EMAIL, TEST_PASSWORD)}
-      secondaryDisabled={submitting}
+      hero={
+        <SafeAreaView edges={['top']} style={styles.hero}>
+          <ThemedText themeColor="accent" style={styles.name}>
+            Lendr
+          </ThemedText>
+          <ThemedText style={styles.headline}>
+            Your campus{' '}
+            <ThemedText style={styles.headline} themeColor="accent">
+              closet.
+            </ThemedText>
+          </ThemedText>
+          <ThemedText themeColor="textSecondary">Borrow and lend clothes with other UT students.</ThemedText>
+        </SafeAreaView>
+      }
       footer={
         <View style={styles.footer}>
           {unconfirmed ? (
@@ -57,7 +69,7 @@ export default function SignInScreen() {
           </Link>
           <ThemedText type="small" themeColor="textSecondary">
             New to Lendr?{' '}
-            <Link href="/sign-up" replace>
+            <Link href="/sign-up">
               <ThemedText type="smallBold" themeColor="accent">
                 Create an account
               </ThemedText>
@@ -94,6 +106,21 @@ export default function SignInScreen() {
 }
 
 const styles = StyleSheet.create({
+  hero: {
+    gap: Spacing.two,
+    paddingTop: Spacing.five,
+    paddingBottom: Spacing.two,
+  },
+  name: {
+    fontFamily: Fonts.heading,
+    fontSize: 48,
+    lineHeight: 56,
+  },
+  headline: {
+    fontFamily: Fonts.heading,
+    fontSize: 28,
+    lineHeight: 34,
+  },
   footer: {
     gap: Spacing.three,
   },

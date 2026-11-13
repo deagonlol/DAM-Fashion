@@ -19,6 +19,7 @@ import {
   orderStage,
   orderStatus,
   pickRange,
+  dragRange,
   ordersFor,
   codeToShow,
   isExpiredRequest,
@@ -658,5 +659,25 @@ describe('expired requests', () => {
       next: null,
       step: null,
     });
+  });
+});
+
+describe('dragRange', () => {
+  const free = () => true;
+
+  it('covers the days dragged across, in either direction', () => {
+    expect(dragRange('2026-10-20', '2026-10-23', free)).toEqual({ startDate: '2026-10-20', endDate: '2026-10-23' });
+    expect(dragRange('2026-10-20', '2026-10-18', free)).toEqual({ startDate: '2026-10-18', endDate: '2026-10-20' });
+  });
+
+  it('stops before a taken day and at the longest borrow', () => {
+    const taken = (start: string) => start !== '2026-10-22';
+    expect(dragRange('2026-10-20', '2026-10-25', taken)).toEqual({ startDate: '2026-10-20', endDate: '2026-10-21' });
+    const long = dragRange('2026-10-01', '2026-10-30', free);
+    expect(long?.endDate).toBe('2026-10-14');
+  });
+
+  it('ignores a drag that starts on a taken day', () => {
+    expect(dragRange('2026-10-22', '2026-10-25', (start) => start !== '2026-10-22')).toBeNull();
   });
 });

@@ -6,7 +6,8 @@ import { useTheme } from '@/hooks/use-theme';
 
 type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   title: string;
-  variant?: 'primary' | 'secondary' | 'outline';
+  /** `danger` is for anything permanent (delete); `dangerFilled` is its second, confirming tap. */
+  variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'dangerFilled';
   style?: StyleProp<ViewStyle>;
 };
 
@@ -15,6 +16,10 @@ export function Button({ title, disabled, variant = 'primary', style, ...rest }:
   const theme = useTheme();
   const primary = variant === 'primary';
   const outline = variant === 'outline';
+  const danger = variant === 'danger';
+  const dangerFilled = variant === 'dangerFilled';
+  const labelColor =
+    primary || dangerFilled ? theme.onAccent : outline ? theme.accent : danger ? theme.danger : theme.text;
 
   return (
     <Pressable
@@ -25,16 +30,18 @@ export function Button({ title, disabled, variant = 'primary', style, ...rest }:
         styles.button,
         primary
           ? { backgroundColor: theme.accent }
-          : outline
-            ? [styles.outline, { borderColor: theme.accent }]
-            : { backgroundColor: theme.backgroundElement },
+          : dangerFilled
+            ? { backgroundColor: theme.danger }
+            : danger
+              ? [styles.outline, { borderColor: theme.danger }]
+              : outline
+                ? [styles.outline, { borderColor: theme.accent }]
+                : { backgroundColor: theme.backgroundElement },
         (pressed || disabled) && styles.dimmed,
         style,
       ]}
       {...rest}>
-      <ThemedText style={[styles.label, { color: primary ? theme.onAccent : outline ? theme.accent : theme.text }]}>
-        {title}
-      </ThemedText>
+      <ThemedText style={[styles.label, { color: labelColor }]}>{title}</ThemedText>
     </Pressable>
   );
 }

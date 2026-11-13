@@ -158,7 +158,7 @@ export default function ShelfScreen() {
             <View style={[styles.footer, { borderColor: theme.border }]}>
               <Button
                 title={confirmingDelete ? 'Tap again to delete this shelf' : 'Delete shelf'}
-                variant="outline"
+                variant={confirmingDelete ? 'dangerFilled' : 'danger'}
                 onPress={handleDelete}
               />
               <ThemedText type="small" themeColor="textSecondary" style={styles.center}>

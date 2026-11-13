@@ -1,14 +1,16 @@
+import * as Linking from 'expo-linking';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
-import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Avatar } from '@/components/avatar';
 import { TopBadge } from '@/components/badge-row';
 import { Button } from '@/components/button';
 import { ListingCard } from '@/components/listing-card';
 import { PhotoCarousel } from '@/components/photo-carousel';
 import { PickupSpotList } from '@/components/pickup-spots';
+import { QuickMessage } from '@/components/quick-message';
 import { ReviewCard } from '@/components/review-card';
 import { SaveButton } from '@/components/save-button';
 import { ThemedText } from '@/components/themed-text';
@@ -24,9 +26,8 @@ import { useShelves } from '@/hooks/use-shelves';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser, useUserStats } from '@/hooks/use-users';
 import { EMPTY_FILTERS, similarListings } from '@/lib/data/listings';
-import { getOrCreateConversation } from '@/lib/data/messages';
-import { bookedDays } from '@/lib/data/rentals';
-import { formatPrice, formatPricePerDay } from '@/lib/format';
+import { bookedDays, toDateString } from '@/lib/data/rentals';
+import { formatDay, formatPrice, formatPricePerDay } from '@/lib/format';
 
 const REVIEWS_SHOWN = 3;
 const SIMILAR_SHOWN = 4;
@@ -85,14 +86,14 @@ export default function ListingDetailScreen() {
 
   const isOwnListing = listing.ownerId === currentUser.id;
 
-  async function openChat() {
+  async function shareListing() {
     if (!listing) return;
     setError(null);
     try {
-      const conversation = await getOrCreateConversation(listing.id);
-      router.push(`/chat/${conversation.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not open chat.');
+      const url = Linking.createURL(`/listing/${listing.id}`);
+      await Share.share({ message: `${listing.title} on Lendr: ${url}` });
+    } catch {
+      setError('Sharing isn’t available here.');
     }
   }
 
@@ -113,7 +114,12 @@ export default function ListingDetailScreen() {
               onPress={() => router.push(`/sale/${incomingBuys[0].id}`)}
             />
           ) : null}
-          <Button title="Manage listing" variant="secondary" onPress={() => router.push(`/manage/${listing.id}`)} />
+          <Button title="Edit listing" variant="secondary" onPress={() => router.push(`/edit-listing/${listing.id}`)} />
+          {listing.paused ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+              Paused: hidden from browse. Turn it back on in Edit listing.
+            </ThemedText>
+          ) : null}
         </>
       );
     }
@@ -134,7 +140,6 @@ export default function ListingDetailScreen() {
     const canBuy = listing.salePrice != null && !listing.soldAt;
     return (
       <>
-        <Button title="Message Lender" variant="secondary" onPress={openChat} />
         {canBuy ? (
           myOpenBuy ? (
             <Button title="View your buy request" onPress={() => router.push(`/sale/${myOpenBuy.id}`)} />
@@ -178,10 +183,24 @@ export default function ListingDetailScreen() {
           </View>
           <View style={styles.metaRow}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.flex}>
-              Size {listing.size}
-              {listing.brand ? ` · ${listing.brand}` : ''} · {listing.category}
-              {listing.soldAt ? ' · Sold' : ''}
+              {listing.rentable !== false && listing.salePrice != null && !listing.soldAt
+                ? `or ${formatPrice(listing.salePrice)} to buy`
+                : listing.soldAt
+                  ? 'Sold'
+                  : ''}
             </ThemedText>
+            <Pressable
+              onPress={shareListing}
+              accessibilityRole="button"
+              accessibilityLabel="Share listing"
+              hitSlop={8}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <SymbolView
+                name={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }}
+                tintColor={theme.text}
+                size={22}
+              />
+            </Pressable>
             <SaveButton listingId={listing.id} variant="inline" />
             <Pressable
               onPress={() => router.push(`/add-to-shelf/${listing.id}`)}
@@ -194,6 +213,47 @@ export default function ListingDetailScreen() {
               </ThemedText>
             </Pressable>
           </View>
+
+          <View style={styles.actions}>{renderActions()}</View>
+          {/* One line instead of a second calendar: dates get picked on the Rent screen. */}
+          {!listing.soldAt && listing.rentable !== false && !listing.paused ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+              {availabilityLine(bookedDates, new Set(listing.blockedDates ?? []))}
+            </ThemedText>
+          ) : null}
+          {/* Pre-filled instead of a "Message" button: one tap sends it. */}
+          {!isOwnListing && !listing.soldAt ? (
+            <QuickMessage listingId={listing.id} name={owner?.name.split(' ')[0]} />
+          ) : null}
+          {error ? (
+            <ThemedText type="small" themeColor="danger">
+              {error}
+            </ThemedText>
+          ) : null}
+
+          <View style={[styles.details, { borderColor: theme.border }]}>
+            <DetailItem label="Size" value={listing.size} />
+            <DetailItem label="Type" value={listing.category} />
+            {listing.brand ? <DetailItem label="Brand" value={listing.brand} /> : null}
+          </View>
+
+          {listing.events.length > 0 ? (
+            <View style={styles.section}>
+              <ThemedText type="smallBold">Good for</ThemedText>
+              <View style={styles.tags}>
+                {listing.events.map((event) => (
+                  <Pressable
+                    key={event}
+                    onPress={() => router.push({ pathname: '/search', params: { event } })}
+                    accessibilityRole="link"
+                    accessibilityLabel={`More ${event} outfits`}
+                    style={({ pressed }) => [styles.tag, { borderColor: theme.border }, pressed && styles.pressed]}>
+                    <ThemedText type="small">{event}</ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           {listing.description ? (
             <View style={styles.section}>
@@ -210,40 +270,11 @@ export default function ListingDetailScreen() {
             </View>
           ) : null}
 
-          {listing.events.length > 0 ? (
-            <View style={styles.tags}>
-              {listing.events.map((event) => (
-                <Pressable
-                  key={event}
-                  onPress={() => router.push({ pathname: '/search', params: { event } })}
-                  accessibilityRole="link"
-                  accessibilityLabel={`More ${event} outfits`}
-                  style={({ pressed }) => [styles.tag, { borderColor: theme.border }, pressed && styles.pressed]}>
-                  <ThemedText type="small">{event}</ThemedText>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
           {listing.pickupSpots?.length ? (
             <View style={styles.section}>
               <ThemedText type="smallBold">Pickup spots</ThemedText>
               <PickupSpotList spots={listing.pickupSpots} />
             </View>
-          ) : null}
-
-          {!listing.soldAt && listing.rentable !== false ? (
-            <View style={styles.section}>
-              <ThemedText type="smallBold">Availability</ThemedText>
-              <AvailabilityCalendar bookedDates={bookedDates} blockedDates={new Set(listing.blockedDates ?? [])} />
-            </View>
-          ) : null}
-
-          <View style={styles.actions}>{renderActions()}</View>
-          {error ? (
-            <ThemedText type="small" themeColor="danger">
-              {error}
-            </ThemedText>
           ) : null}
 
           <Pressable
@@ -316,7 +347,43 @@ export default function ListingDetailScreen() {
   );
 }
 
+/** "Available today", or the next day it's free, from the days already booked or blocked. */
+function availabilityLine(booked: Set<string>, blocked: Set<string>) {
+  const day = new Date();
+  for (let i = 0; i < 90; i++) {
+    const date = toDateString(day);
+    if (!booked.has(date) && !blocked.has(date)) {
+      return i === 0 ? 'Available today · pick dates when you tap Rent' : `Next free: ${formatDay(date)}`;
+    }
+    day.setDate(day.getDate() + 1);
+  }
+  return 'Booked for the next few months';
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detailItem}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <ThemedText type="smallBold" numberOfLines={1}>
+        {value}
+      </ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  details: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.three,
+  },
+  detailItem: {
+    flex: 1,
+    gap: Spacing.half,
+  },
   container: {
     flex: 1,
   },

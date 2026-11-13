@@ -66,7 +66,7 @@ npm run android    # Android emulator
 npm start          # dev server; scan the QR code with Expo Go
 ```
 
-**Test account:** `alex.damtest@utexas.edu` / `damfashion`, or tap **Skip login**. The other seeded accounts are listed at the top of `supabase/seed.sql`.
+**Test account:** `alex.damtest@utexas.edu` / `damfashion`. The other seeded accounts are listed at the top of `supabase/seed.sql`.
 
 ### Photo search
 

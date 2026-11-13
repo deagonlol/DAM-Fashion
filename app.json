@@ -46,6 +46,12 @@
         {
           "locationWhenInUsePermission": "Lendr uses your location only to show how far each campus pickup spot is."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "enableRemoteNotifications": false
+        }
       ]
     ],
     "experiments": {

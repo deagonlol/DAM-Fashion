@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AvailabilityCalendar } from '@/components/availability-calendar';
 import { Button } from '@/components/button';
 import { ChipGroup } from '@/components/chip-group';
+import { PriceBreakdown } from '@/components/price-breakdown';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -28,6 +29,7 @@ import {
   type DateRange,
 } from '@/lib/data/rentals';
 import { PICKUP_SPOTS, type PickupSpot } from '@/lib/data/types';
+import { rentalPrice } from '@/lib/fees';
 import { formatDay, formatPrice, formatTime } from '@/lib/format';
 
 const TITLES = { edit: 'Edit request', counter: 'Counter-offer', change: 'Change plans' } as const;
@@ -214,10 +216,14 @@ export default function ProposeScreen() {
                 {isLender
                   ? `Your listed price is ${formatPrice(listing.pricePerDay)}/day. You can go lower.`
                   : `At least the listed ${formatPrice(listing.pricePerDay)}/day.`}
-                {range && priceOk
-                  ? ` Total: ${formatPrice(perDay * days)} for ${days} ${days === 1 ? 'day' : 'days'}.`
-                  : ''}
               </ThemedText>
+              {range && priceOk ? (
+                <PriceBreakdown
+                  role={isLender ? 'payee' : 'payer'}
+                  label={`${formatPrice(perDay)}/day × ${days} ${days === 1 ? 'day' : 'days'}`}
+                  price={rentalPrice(perDay, days)}
+                />
+              ) : null}
             </View>
           ) : null}
 

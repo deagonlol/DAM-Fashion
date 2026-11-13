@@ -7,6 +7,7 @@ import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
 import { ConditionPhotos } from '@/components/condition-photos';
 import { PickupSpotRow, WalkingTimesPrompt } from '@/components/pickup-spots';
+import { PriceBreakdown } from '@/components/price-breakdown';
 import { ProposalCard } from '@/components/proposal-card';
 import { STATUS_LABELS } from '@/components/rental-row';
 import { ReviewCard } from '@/components/review-card';
@@ -43,6 +44,7 @@ import {
 } from '@/lib/data/rentals';
 import { canReview, isReviewVisible, reviewDaysLeft } from '@/lib/data/reviews';
 import type { Rental, RentalStatus } from '@/lib/data/types';
+import { rentalPrice, lateFee } from '@/lib/fees';
 import { formatDay, formatPrice, formatTime } from '@/lib/format';
 
 const STEPS: { status: RentalStatus; label: string }[] = [
@@ -81,8 +83,9 @@ export default function RentalScreen() {
   const otherName = other?.name ?? (role === 'borrower' ? 'the lender' : 'the borrower');
   const firstName = otherName.split(' ')[0];
   const dailyPrice = rental.offeredPricePerDay ?? listing?.pricePerDay;
-  const total = dailyPrice != null ? dailyPrice * rentalDays(rental.startDate, rental.endDate) : null;
+  const days = rentalDays(rental.startDate, rental.endDate);
   const late = daysOverdue(rental, now);
+  const lateCharge = dailyPrice != null && late > 0 ? lateFee(dailyPrice, late, listing?.salePrice) : null;
   const expired = isExpiredRequest(rental, toDateString(now));
   const myReview = rentalReviews.find((review) => review.reviewerId === user.id);
   const visibleReviews = rentalReviews.filter((review) => isReviewVisible(review, allReviews, [rental], now));
@@ -157,7 +160,13 @@ export default function RentalScreen() {
                 <WalkingTimesPrompt />
               </>
             ) : null}
-            {total !== null ? <Detail label="Total" value={formatPrice(total)} /> : null}
+            {dailyPrice != null ? (
+              <PriceBreakdown
+                role={role === 'borrower' ? 'payer' : 'payee'}
+                label={`${formatPrice(dailyPrice)}/day × ${days} ${days === 1 ? 'day' : 'days'}`}
+                price={rentalPrice(dailyPrice, days)}
+              />
+            ) : null}
             <Pressable
               onPress={() => router.push(`/user/${other?.id ?? ''}`)}
               accessibilityRole="link"
@@ -269,8 +278,16 @@ export default function RentalScreen() {
               {late > 0 ? (
                 <ThemedText type="smallBold" themeColor="danger">
                   {role === 'borrower'
-                    ? 'Return it as soon as you can. Late fees will apply once payments are live.'
-                    : `We’ve reminded ${firstName}.`}
+                    ? `Return it as soon as you can.${
+                        lateCharge != null
+                          ? ` The late fee so far is ${formatPrice(lateCharge)}. It isn’t collected yet, and it all goes to ${firstName}.`
+                          : ''
+                      }`
+                    : `We’ve reminded ${firstName}.${
+                        lateCharge != null
+                          ? ` The late fee so far is ${formatPrice(lateCharge)}, and it all goes to you. It isn’t collected yet.`
+                          : ''
+                      }`}
                 </ThemedText>
               ) : (
                 <ThemedText>Due back {formatDay(rental.endDate)}.</ThemedText>

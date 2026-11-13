@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
 import { ListingCard } from '@/components/listing-card';
@@ -12,10 +12,17 @@ type ListingGridProps = {
   emptyText?: string;
 };
 
+/** Cards rendered at first and added each time the end comes into view. */
+const PAGE_SIZE = 20;
+
+/** Two-column grid that keeps loading more as you scroll. */
 export function ListingGrid({ listings, header, emptyText = 'No listings yet.' }: ListingGridProps) {
+  const [shown, setShown] = useState(PAGE_SIZE);
   return (
     <FlatList
-      data={listings}
+      data={listings.slice(0, shown)}
+      onEndReached={() => setShown((count) => (count < listings.length ? count + PAGE_SIZE : count))}
+      onEndReachedThreshold={0.6}
       keyExtractor={(item) => item.id}
       numColumns={2}
       renderItem={({ item }) => (

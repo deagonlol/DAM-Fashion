@@ -6,8 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/avatar';
 import { ChipGroup } from '@/components/chip-group';
-import { ProfileButton } from '@/components/profile-button';
-import { TextField } from '@/components/text-field';
+import { SearchBar } from '@/components/search-bar';
+import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -16,14 +16,14 @@ import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMessageTime } from '@/lib/format';
 
-/** "Lenders" are chats about items you're borrowing; "My listings" are chats about your items. */
-const FILTERS = ['All', 'Lenders', 'My listings'] as const;
+/** Same split as Orders: chats about things you rent or buy, and chats about your own listings. */
+const FILTERS = ['All', 'Rent/Buy', 'Lend/Sell'] as const;
 type Filter = (typeof FILTERS)[number];
 
 const EMPTY: Record<Filter, string> = {
   All: 'No messages yet. Message an owner from any listing.',
-  Lenders: 'No chats with lenders yet. Message one from any listing.',
-  'My listings': 'No one has messaged you about your items yet.',
+  'Rent/Buy': 'No chats about things you’re renting or buying yet. Message an owner from any listing.',
+  'Lend/Sell': 'No one has messaged you about your listings yet.',
 };
 
 /** Your conversations, newest first, searchable by person, item, or message. */
@@ -35,8 +35,8 @@ export default function InboxScreen() {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return summaries.filter((summary) => {
-      if (filter === 'Lenders' && summary.role !== 'borrower') return false;
-      if (filter === 'My listings' && summary.role !== 'lender') return false;
+      if (filter === 'Rent/Buy' && summary.role !== 'borrower') return false;
+      if (filter === 'Lend/Sell' && summary.role !== 'lender') return false;
       if (!q) return true;
       return [summary.otherUserName, summary.listing?.title, summary.lastMessage?.text].some((text) =>
         text?.toLowerCase().includes(q)
@@ -47,15 +47,8 @@ export default function InboxScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <ThemedText type="subtitle" themeColor="accent">
-            Inbox
-          </ThemedText>
-          <ProfileButton />
-        </View>
-        <View style={styles.controls}>
-          <TextField
-            variant="search"
+        <TabHeader title="Inbox">
+          <SearchBar
             value={query}
             onChangeText={setQuery}
             placeholder="Search messages…"
@@ -63,8 +56,8 @@ export default function InboxScreen() {
             clearButtonMode="while-editing"
             autoCorrect={false}
           />
-          <ChipGroup options={FILTERS} value={filter} onChange={(next) => next && setFilter(next)} />
-        </View>
+          <ChipGroup variant="segment" options={FILTERS} value={filter} onChange={(next) => next && setFilter(next)} />
+        </TabHeader>
         <FlatList
           data={shown}
           keyExtractor={(item) => item.conversation.id}
@@ -116,7 +109,7 @@ function ConversationRow({ summary }: { summary: ConversationSummary }) {
         </View>
         {listing ? (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {summary.role === 'lender' ? `Your listing · ${listing.title}` : listing.title}
+            {summary.role === 'lender' ? `Your listing · ${listing.title}` : `Renting · ${listing.title}`}
           </ThemedText>
         ) : null}
         <ThemedText type={unread > 0 ? 'smallBold' : 'small'} numberOfLines={1}>

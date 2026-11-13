@@ -53,9 +53,9 @@ export function ComingUp() {
         </Pressable>
       ))}
       {more > 0 ? (
-        <Pressable onPress={() => router.push('/orders')} accessibilityRole="link" hitSlop={8}>
+        <Pressable onPress={() => router.push('/notifications')} accessibilityRole="link" hitSlop={8}>
           <ThemedText type="small" themeColor="accent">
-            {more} more in Orders ›
+            {more} more ›
           </ThemedText>
         </Pressable>
       ) : null}

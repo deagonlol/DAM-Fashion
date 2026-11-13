@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { memo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SaveButton } from '@/components/save-button';
@@ -9,7 +10,8 @@ import { useTheme } from '@/hooks/use-theme';
 import type { Listing } from '@/lib/data/types';
 import { formatPrice, formatPricePerDay } from '@/lib/format';
 
-export function ListingCard({ listing }: { listing: Listing }) {
+/** Memoized: Home shows hundreds of these, and a card only changes when its listing does. */
+export const ListingCard = memo(function ListingCard({ listing }: { listing: Listing }) {
   const theme = useTheme();
 
   return (
@@ -21,7 +23,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <Image
           source={listing.imageUris[0]}
           style={[styles.image, { backgroundColor: theme.backgroundElement }]}
-          contentFit="contain"
+          contentFit="cover"
           transition={150}
         />
         <SaveButton listingId={listing.id} />
@@ -45,7 +47,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

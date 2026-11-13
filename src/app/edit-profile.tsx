@@ -61,7 +61,7 @@ export default function EditProfileScreen() {
     setError(null);
     setDeleting(true);
     try {
-      // On success the auth guard in the root layout switches back to the welcome screen.
+      // On success the auth guard in the root layout switches back to the log in screen.
       await deleteAccount();
     } catch (e) {
       setConfirmingDelete(false);
@@ -126,7 +126,7 @@ export default function EditProfileScreen() {
           <View style={[styles.danger, { borderColor: theme.border }]}>
             <Button
               title={confirmingDelete ? 'Tap again to delete your account' : 'Delete account'}
-              variant="secondary"
+              variant={confirmingDelete ? 'dangerFilled' : 'danger'}
               disabled={deleting}
               onPress={handleDelete}
             />

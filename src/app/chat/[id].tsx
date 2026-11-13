@@ -118,42 +118,44 @@ export default function ChatScreen() {
         }}
       />
       <KeyboardAvoidingView style={styles.container} behavior="padding" keyboardVerticalOffset={headerHeight}>
-        {listing ? (
-          <Pressable
-            onPress={() => router.push(`/listing/${listing.id}`)}
-            accessibilityRole="link"
-            style={({ pressed }) => [
-              styles.listingBanner,
-              { backgroundColor: theme.backgroundElement },
-              pressed && styles.dimmed,
-            ]}>
-            <Image
-              source={listing.imageUris[0]}
-              style={[styles.listingThumb, { backgroundColor: theme.background }]}
-              contentFit="cover"
-            />
-            <View style={styles.flex}>
-              <ThemedText type="smallBold" numberOfLines={1} style={styles.listingTitle}>
-                {listing.title}
-              </ThemedText>
-              <ThemedText type="small" themeColor="accent">
-                {formatPricePerDay(listing.pricePerDay)}
-                <ThemedText type="small" themeColor="textSecondary">
-                  {' '}
-                  · Size {listing.size}
-                  {listing.brand ? ` · ${listing.brand}` : ''}
-                </ThemedText>
-              </ThemedText>
-            </View>
-            <ThemedText type="small" themeColor="accent">
-              View ›
-            </ThemedText>
-          </Pressable>
-        ) : null}
-
         <FlatList
           data={newestFirst}
           inverted
+          // The item sits above the first message and scrolls away with the chat (inverted: footer = top).
+          ListFooterComponent={
+            listing ? (
+              <Pressable
+                onPress={() => router.push(`/listing/${listing.id}`)}
+                accessibilityRole="link"
+                style={({ pressed }) => [
+                  styles.listingBanner,
+                  { backgroundColor: theme.backgroundElement },
+                  pressed && styles.dimmed,
+                ]}>
+                <Image
+                  source={listing.imageUris[0]}
+                  style={[styles.listingThumb, { backgroundColor: theme.background }]}
+                  contentFit="cover"
+                />
+                <View style={styles.flex}>
+                  <ThemedText type="smallBold" numberOfLines={1} style={styles.listingTitle}>
+                    {listing.title}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="accent">
+                    {formatPricePerDay(listing.pricePerDay)}
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {' '}
+                      · Size {listing.size}
+                      {listing.brand ? ` · ${listing.brand}` : ''}
+                    </ThemedText>
+                  </ThemedText>
+                </View>
+                <ThemedText type="small" themeColor="accent">
+                  View ›
+                </ThemedText>
+              </Pressable>
+            ) : undefined
+          }
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <MessageBubble
@@ -304,8 +306,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    margin: Spacing.three,
-    marginBottom: 0,
+    marginBottom: Spacing.three,
     padding: Spacing.two,
     borderRadius: 12,
   },

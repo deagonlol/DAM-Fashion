@@ -5,27 +5,39 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { ChipGroup } from '@/components/chip-group';
+import { DraftList } from '@/components/draft-card';
 import { ListingGrid } from '@/components/listing-grid';
-import { ProfileButton } from '@/components/profile-button';
+import { SearchBar } from '@/components/search-bar';
 import { ShelfCard } from '@/components/shelf-card';
-import { TextField } from '@/components/text-field';
+import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useListingsByOwner } from '@/hooks/use-listings';
 import { useSavedListings } from '@/hooks/use-saves';
 import { useCurrentUser } from '@/hooks/use-session';
-import { useShelves } from '@/hooks/use-shelves';
+import { useShelves, type ShelfWithListings } from '@/hooks/use-shelves';
 import { listingMentions } from '@/lib/data/listings';
 
-const VIEWS = ['Pieces', 'Shelves'] as const;
+const VIEWS = ['Rack', 'Shelves'] as const;
+const ALL_SAVED_ID = 'all-saved';
 type ClosetView = (typeof VIEWS)[number];
 
-/** Your closet: pieces you saved, and shelves that group pieces into looks. */
+/**
+ * Your closet. "Rack" is what you lend, hanging up for others to borrow (plus drafts). "Shelves"
+ * is what you collect: an "All saved" shelf of everything you hearted, then the shelves you make.
+ */
 export default function ClosetScreen() {
   const user = useCurrentUser();
   const saved = useSavedListings(user.id);
+  const mine = useListingsByOwner(user.id);
   const shelves = useShelves();
-  const [view, setView] = useState<ClosetView>('Pieces');
+  // Every hearted piece, shown as the first board like Pinterest's "All pins".
+  const allSaved: ShelfWithListings = useMemo(
+    () => ({ id: ALL_SAVED_ID, ownerId: user.id, name: 'All saved', listingIds: [], createdAt: '', listings: saved }),
+    [user.id, saved]
+  );
+  const [view, setView] = useState<ClosetView>('Rack');
   const [query, setQuery] = useState('');
   const searching = query.trim().length > 0;
 
@@ -33,71 +45,61 @@ export default function ClosetScreen() {
     () => (searching ? saved.filter((listing) => listingMentions(listing, query)) : saved),
     [saved, query, searching]
   );
-  // A shelf matches on its own name or on any piece on it.
-  const shownShelves = useMemo(
-    () =>
-      searching
-        ? shelves.filter(
-            (shelf) =>
-              shelf.name.toLowerCase().includes(query.trim().toLowerCase()) ||
-              shelf.listings.some((listing) => listingMentions(listing, query))
-          )
-        : shelves,
-    [shelves, query, searching]
+  const shownMine = useMemo(
+    () => (searching ? mine.filter((listing) => listingMentions(listing, query)) : mine),
+    [mine, query, searching]
   );
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <ThemedText type="subtitle" themeColor="accent">
-            My Closet
-          </ThemedText>
-          <ProfileButton />
-        </View>
-        <View style={styles.controls}>
-          <TextField
-            variant="search"
+        <TabHeader title="My Closet">
+          <SearchBar
             value={query}
             onChangeText={setQuery}
-            placeholder={view === 'Pieces' ? 'Search your closet…' : 'Search your shelves…'}
+            placeholder={view === 'Shelves' ? 'Search your shelves…' : 'Search your rack…'}
             returnKeyType="search"
             clearButtonMode="while-editing"
             autoCorrect={false}
           />
           <ChipGroup variant="segment" options={VIEWS} value={view} onChange={(next) => next && setView(next)} />
-        </View>
-        {view === 'Pieces' ? (
+        </TabHeader>
+        {view === 'Rack' ? (
           <ListingGrid
-            listings={shownPieces}
-            emptyText={searching ? 'Nothing in your closet matches.' : 'Tap the ♡ on any item to save it here.'}
+            listings={shownMine}
+            header={
+              <View style={styles.mineHeader}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  What you’re lending out. Others can borrow anything on your rack.
+                </ThemedText>
+                <Button title="+ List an item" onPress={() => router.push('/list')} />
+                <DraftList />
+              </View>
+            }
+            emptyText={
+              searching ? 'Nothing on your rack matches.' : 'Your rack is empty. Hang something up to start earning.'
+            }
           />
+        ) : searching ? (
+          // Searching Shelves looks through every saved piece, not the shelves themselves.
+          <ListingGrid listings={shownPieces} emptyText="Nothing on your shelves matches." />
         ) : (
           <FlatList
-            data={shownShelves}
+            data={[allSaved, ...shelves]}
             keyExtractor={(shelf) => shelf.id}
             numColumns={2}
             renderItem={({ item }) => (
               <View style={styles.cell}>
-                <ShelfCard shelf={item} />
+                <ShelfCard shelf={item} href={item.id === ALL_SAVED_ID ? '/saved' : undefined} />
               </View>
             )}
             ListHeaderComponent={
               <View style={styles.shelvesHeader}>
-                <Button
-                  title="+ New Shelf"
-                  onPress={() => router.push('/shelf/name')}
-                  style={styles.newShelf}
-                />
+                <Button title="+ New shelf" onPress={() => router.push('/shelf/name')} style={styles.newShelf} />
                 <ThemedText type="small" themeColor="textSecondary">
-                  Group pieces into looks for an event. Discover, plan, and build your next look, all in one place.
+                  Everything you heart lands on All saved. Make more shelves to group pieces into looks for an event.
                 </ThemedText>
               </View>
-            }
-            ListEmptyComponent={
-              <ThemedText themeColor="textSecondary" style={styles.empty}>
-                {searching ? 'No shelves match.' : 'No shelves yet. Make one, then add pieces from any listing.'}
-              </ThemedText>
             }
             columnWrapperStyle={styles.row}
             contentContainerStyle={styles.list}
@@ -114,17 +116,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.two,
-  },
-  controls: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.three,
+  mineHeader: {
     gap: Spacing.three,
   },
   shelvesHeader: {
@@ -145,9 +137,5 @@ const styles = StyleSheet.create({
   // Keeps a lone shelf in the last row at half width instead of stretching.
   cell: {
     flex: 1 / 2,
-  },
-  empty: {
-    textAlign: 'center',
-    paddingTop: Spacing.five,
   },
 });

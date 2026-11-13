@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChipGroup } from '@/components/chip-group';
 import { OrderCard, SaleOrderCard } from '@/components/order-card';
-import { ProfileButton } from '@/components/profile-button';
-import { TextField } from '@/components/text-field';
+import { SearchBar } from '@/components/search-bar';
+import { TabHeader } from '@/components/tab-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -65,15 +65,8 @@ export default function OrdersScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <ThemedText type="subtitle" themeColor="accent">
-              My Orders
-            </ThemedText>
-            <ProfileButton />
-          </View>
-          <TextField
-            variant="search"
+        <TabHeader title="My Orders">
+          <SearchBar
             value={query}
             onChangeText={setQuery}
             placeholder={side === 'Rent/Buy' ? 'Search items or lenders…' : 'Search items or renters…'}
@@ -104,7 +97,7 @@ export default function OrdersScreen() {
               );
             })}
           </View>
-        </View>
+        </TabHeader>
         <FlatList
           data={items}
           keyExtractor={keyOf}

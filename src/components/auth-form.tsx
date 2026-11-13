@@ -17,6 +17,8 @@ type AuthFormProps = {
   onSecondary?: () => void;
   secondaryDisabled?: boolean;
   footer?: ReactNode;
+  /** Shown above the fields, e.g. the logo on the log in screen. */
+  hero?: ReactNode;
 };
 
 /** Shared layout for the sign-in and sign-up screens. */
@@ -30,16 +32,16 @@ export function AuthForm({
   onSecondary,
   secondaryDisabled,
   footer,
+  hero,
 }: AuthFormProps) {
   return (
     <ThemedView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="always"
           contentInsetAdjustmentBehavior="automatic">
+          {hero}
           {children}
           {error ? (
             <ThemedText type="small" themeColor="danger" accessibilityLiveRegion="polite">
@@ -49,12 +51,7 @@ export function AuthForm({
           <View style={styles.actions}>
             <Button title={submitTitle} onPress={onSubmit} disabled={!canSubmit} />
             {secondaryTitle && onSecondary ? (
-              <Button
-                title={secondaryTitle}
-                variant="secondary"
-                onPress={onSecondary}
-                disabled={secondaryDisabled}
-              />
+              <Button title={secondaryTitle} variant="secondary" onPress={onSecondary} disabled={secondaryDisabled} />
             ) : null}
           </View>
           {footer ? <View>{footer}</View> : null}

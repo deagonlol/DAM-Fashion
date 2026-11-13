@@ -19,23 +19,23 @@ export default function TabLayout() {
       }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
+        <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="inbox">
         <NativeTabs.Trigger.Label>Inbox</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="envelope.fill" md="mail" />
+        <NativeTabs.Trigger.Icon sf={{ default: 'envelope', selected: 'envelope.fill' }} md="mail" />
         <NativeTabs.Trigger.Badge hidden={unreadChats === 0}>{String(unreadChats)}</NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="closet">
         <NativeTabs.Trigger.Label>Closet</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="tshirt.fill" md="checkroom" />
+        <NativeTabs.Trigger.Icon sf={{ default: 'tshirt', selected: 'tshirt.fill' }} md="checkroom" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="orders">
         <NativeTabs.Trigger.Label>Orders</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="bag.fill" md="shopping_bag" />
+        <NativeTabs.Trigger.Icon sf={{ default: 'bag', selected: 'bag.fill' }} md="shopping_bag" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );

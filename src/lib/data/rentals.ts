@@ -69,16 +69,36 @@ export function pickRange(
   return { startDate: date, endDate: date };
 }
 
+/**
+ * Dates from dragging across the calendar, from the day the finger went down to the day it's on now,
+ * in either direction. Stops at the first unavailable day and at the longest allowed borrow.
+ */
+export function dragRange(
+  anchor: string,
+  date: string,
+  isFree: (start: string, end: string) => boolean
+): DateRange | null {
+  if (!isFree(anchor, anchor)) return null;
+  const forward = date >= anchor;
+  const day = new Date(`${anchor}T00:00:00`);
+  let reached = anchor;
+  for (let i = 1; i < MAX_RENTAL_DAYS; i++) {
+    if (reached === date) break;
+    day.setDate(day.getDate() + (forward ? 1 : -1));
+    const next = toDateString(day);
+    if (!isFree(next, next)) break;
+    reached = next;
+  }
+  return forward ? { startDate: anchor, endDate: reached } : { startDate: reached, endDate: anchor };
+}
+
 /** When the item is due back: the end of the return date, local time. */
 export function dueAt(rental: Rental) {
   return new Date(`${rental.endDate}T23:59:59`);
 }
 
 export function isOverdue(rental: Rental, now: Date) {
-  return (
-    rental.status === 'picked_up' &&
-    now.getTime() > dueAt(rental).getTime() + LATE_GRACE_HOURS * 60 * 60 * 1000
-  );
+  return rental.status === 'picked_up' && now.getTime() > dueAt(rental).getTime() + LATE_GRACE_HOURS * 60 * 60 * 1000;
 }
 
 /** Whole days past the due date, or 0 if not overdue. */
@@ -287,8 +307,7 @@ export function reportNoShow(rental: Rental, actorId: string, now: Date): Rental
 export function borrowedListings(rentals: Rental[], listings: Listing[], borrowerId: string): Listing[] {
   const latestFirst = rentals
     .filter(
-      (rental) =>
-        rental.borrowerId === borrowerId && (rental.status === 'picked_up' || rental.status === 'returned')
+      (rental) => rental.borrowerId === borrowerId && (rental.status === 'picked_up' || rental.status === 'returned')
     )
     .sort((a, b) => b.startDate.localeCompare(a.startDate));
 

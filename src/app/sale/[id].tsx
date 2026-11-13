@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/button';
+import { PriceBreakdown } from '@/components/price-breakdown';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -16,6 +17,7 @@ import { useUser } from '@/hooks/use-users';
 import { getOrCreateConversation } from '@/lib/data/messages';
 import { acceptSale, cancelSale, declineSale } from '@/lib/data/sales';
 import type { SaleStatus } from '@/lib/data/types';
+import { salePrice } from '@/lib/fees';
 import { formatPrice } from '@/lib/format';
 
 const STATUS_LABELS: Record<SaleStatus, string> = {
@@ -100,6 +102,14 @@ export default function SaleScreen() {
           <ThemedText themeColor="textSecondary">›</ThemedText>
         </Pressable>
 
+        {sale.status !== 'declined' && sale.status !== 'cancelled' ? (
+          <PriceBreakdown
+            role={role === 'borrower' ? 'payer' : 'payee'}
+            label="Item price"
+            price={salePrice(sale.price)}
+          />
+        ) : null}
+
         {sale.status === 'requested' && role === 'lender' ? (
           <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText>
@@ -107,7 +117,12 @@ export default function SaleScreen() {
               requests.
             </ThemedText>
             <View style={styles.row}>
-              <Button title="Decline" variant="secondary" style={styles.flex} onPress={() => run(() => declineSale(sale.id))} />
+              <Button
+                title="Decline"
+                variant="secondary"
+                style={styles.flex}
+                onPress={() => run(() => declineSale(sale.id))}
+              />
               <Button title="Accept" style={styles.flex} onPress={() => run(() => acceptSale(sale.id))} />
             </View>
           </View>

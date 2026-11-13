@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { PanResponder, Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -16,6 +16,10 @@ type AvailabilityCalendarProps = {
   /** Picking borrow dates: the chosen range, and what to do when a free day is tapped. */
   selected?: DateRange | null;
   onSelectDay?: (date: string) => void;
+  /** Drag across days to pick them all at once: the day the finger went down, and the day it's on. */
+  onDragRange?: (anchor: string, date: string) => void;
+  /** True while a drag is picking dates, so the page can stop scrolling under the finger. */
+  onDragChange?: (dragging: boolean) => void;
 };
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -23,7 +27,7 @@ const MONTHS_AHEAD = 3;
 
 /**
  * Month grid showing booked, blocked, and free days. Owners can tap to block days off; borrowers
- * can tap free days to pick their dates.
+ * tap free days, or slide a finger across them, to pick their dates.
  */
 export function AvailabilityCalendar({
   bookedDates,
@@ -31,6 +35,8 @@ export function AvailabilityCalendar({
   onToggleDay,
   selected,
   onSelectDay,
+  onDragRange,
+  onDragChange,
 }: AvailabilityCalendarProps) {
   const picking = Boolean(onSelectDay);
   const theme = useTheme();
@@ -51,6 +57,71 @@ export function AvailabilityCalendar({
   while (cells.length % 7 !== 0) cells.push(null);
 
   const monthLabel = first.toLocaleDateString([], { month: 'long', year: 'numeric' });
+
+  // Sliding to pick a range. The grid's spot on screen is measured when a touch starts, then each
+  // move is mapped to the day under the finger.
+  const gridRef = useRef<React.ComponentRef<typeof View>>(null);
+  const drag = useRef<{ x: number; y: number; width: number; anchor: string | null; last: string | null }>({
+    x: 0,
+    y: 0,
+    width: 0,
+    anchor: null,
+    last: null,
+  });
+  // Read through a ref so the responder, made once, always sees this month's days and callbacks.
+  const live = useRef({ cells, today, onSelectDay, onDragRange, onDragChange });
+  useLayoutEffect(() => {
+    live.current = { cells, today, onSelectDay, onDragRange, onDragChange };
+  });
+
+  const responder = useMemo(() => {
+    const dayAt = (event: GestureResponderEvent) => {
+      const { x, y, width } = drag.current;
+      if (!width) return null;
+      const size = width / 7;
+      const col = Math.floor((event.nativeEvent.pageX - x) / size);
+      const row = Math.floor((event.nativeEvent.pageY - y) / size) - 1; // first row is weekdays
+      if (col < 0 || col > 6 || row < 0) return null;
+      const date = live.current.cells[row * 7 + col];
+      return date && date >= live.current.today ? date : null;
+    };
+    // The handlers only read refs when a touch happens, never while rendering.
+    // eslint-disable-next-line react-hooks/refs
+    return PanResponder.create({
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (event) => {
+        const { pageX, pageY } = event.nativeEvent;
+        drag.current.anchor = null;
+        drag.current.last = null;
+        gridRef.current?.measureInWindow((x, y, width) => {
+          drag.current.x = x;
+          drag.current.y = y;
+          drag.current.width = width;
+          const date = dayAt({ nativeEvent: { pageX, pageY } } as GestureResponderEvent);
+          drag.current.anchor = date;
+          drag.current.last = date;
+        });
+        live.current.onDragChange?.(true);
+      },
+      onPanResponderMove: (event) => {
+        const { anchor, last } = drag.current;
+        const date = dayAt(event);
+        if (!anchor || !date || date === last) return;
+        drag.current.last = date;
+        live.current.onDragRange?.(anchor, date);
+      },
+      onPanResponderRelease: () => {
+        const { anchor, last } = drag.current;
+        // A tap without sliding works like before: first tap starts, second tap ends.
+        if (anchor && last === anchor) live.current.onSelectDay?.(anchor);
+        live.current.onDragChange?.(false);
+      },
+      onPanResponderTerminate: () => live.current.onDragChange?.(false),
+    });
+  }, []);
+  const dragging = picking && Boolean(onDragRange);
 
   return (
     <View style={styles.container}>
@@ -76,7 +147,7 @@ export function AvailabilityCalendar({
         </Pressable>
       </View>
 
-      <View style={styles.grid}>
+      <View ref={gridRef} style={styles.grid} {...(dragging ? responder.panHandlers : {})}>
         {WEEKDAYS.map((day, i) => (
           <View key={`${day}-${i}`} style={styles.cell}>
             <ThemedText type="small" themeColor="textSecondary">
@@ -135,6 +206,11 @@ export function AvailabilityCalendar({
         })}
       </View>
 
+      {dragging ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.hint}>
+          Slide across the days you want, or tap a start and an end.
+        </ThemedText>
+      ) : null}
       <View style={styles.legend}>
         <Legend color={theme.accent} label={picking ? 'Your dates' : 'Booked'} />
         <Legend color={theme.backgroundSelected} label="Unavailable" />
@@ -193,6 +269,9 @@ const styles = StyleSheet.create({
   },
   past: {
     opacity: 0.35,
+  },
+  hint: {
+    textAlign: 'center',
   },
   legend: {
     flexDirection: 'row',

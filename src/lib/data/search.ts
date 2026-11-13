@@ -17,7 +17,19 @@ export type SearchIntent = {
 export type Taste = {
   events: EventTag[];
   categories: Category[];
+  /** How strongly each signal counts, from hearts, shelves, and borrows. Set by tasteFromSignals. */
+  weights?: {
+    events: Partial<Record<EventTag, number>>;
+    categories: Partial<Record<Category, number>>;
+    sizes: Partial<Record<Size, number>>;
+    owners: Record<string, number>;
+  };
+  /** Listings already hearted, so "For you" shows new things first. */
+  savedIds?: string[];
 };
+
+/** What each kind of signal is worth: a heart counts more than owning something similar. */
+export const SIGNAL_WEIGHTS = { saved: 3, shelved: 2, borrowed: 3, owned: 1 } as const;
 
 const EMPTY_INTENT: SearchIntent = { categories: [], events: [], sizes: [], maxPrice: null, words: [] };
 
@@ -198,13 +210,57 @@ export function tasteFromListings(listings: Listing[]): Taste {
   return { events: [...events], categories: [...categories] };
 }
 
+/**
+ * A simple recommender: adds up the events, types, sizes, and lenders of what the viewer hearted,
+ * put on shelves, borrowed, and listed, weighted by how strong each signal is.
+ */
+export function tasteFromSignals(signals: {
+  saved: Listing[];
+  shelved: Listing[];
+  borrowed: Listing[];
+  owned: Listing[];
+}): Taste {
+  const weights: NonNullable<Taste['weights']> = { events: {}, categories: {}, sizes: {}, owners: {} };
+  const add = <K extends string>(map: Partial<Record<K, number>>, key: K, amount: number) => {
+    map[key] = (map[key] ?? 0) + amount;
+  };
+  for (const kind of ['saved', 'shelved', 'borrowed', 'owned'] as const) {
+    const amount = SIGNAL_WEIGHTS[kind];
+    for (const listing of signals[kind]) {
+      for (const event of listing.events) add(weights.events, event, amount);
+      add(weights.categories, listing.category, amount);
+      // Your own sizes and your own listings say little about what you'd borrow.
+      if (kind !== 'owned') {
+        add(weights.sizes, listing.size, amount);
+        add(weights.owners, listing.ownerId, amount);
+      }
+    }
+  }
+  return {
+    events: Object.keys(weights.events) as EventTag[],
+    categories: Object.keys(weights.categories) as Category[],
+    weights,
+    savedIds: signals.saved.map((listing) => listing.id),
+  };
+}
+
 /** Higher means a closer match. Zero for everyone falls through to newest. */
 export function forYouScore(listing: Listing, taste: Taste, words: string[]) {
   let score = 0;
-  for (const event of listing.events) {
-    if (taste.events.includes(event)) score += 3;
+  if (taste.weights) {
+    const { events, categories, sizes, owners } = taste.weights;
+    for (const event of listing.events) score += events[event] ?? 0;
+    score += (categories[listing.category] ?? 0) * 0.8;
+    score += (sizes[listing.size] ?? 0) * 0.5;
+    score += Math.min(owners[listing.ownerId] ?? 0, 6) * 0.5;
+    // Already hearted: still shown, just after things you haven't seen.
+    if (taste.savedIds?.includes(listing.id)) score *= 0.3;
+  } else {
+    for (const event of listing.events) {
+      if (taste.events.includes(event)) score += 3;
+    }
+    if (taste.categories.includes(listing.category)) score += 2;
   }
-  if (taste.categories.includes(listing.category)) score += 2;
   for (const word of words) {
     const q = word.toLowerCase();
     if (listing.title.toLowerCase().includes(q)) score += 4;
