@@ -25,7 +25,7 @@ import { useCurrentUser } from '@/hooks/use-session';
 import { useShelves } from '@/hooks/use-shelves';
 import { useTheme } from '@/hooks/use-theme';
 import { useUser, useUserStats } from '@/hooks/use-users';
-import { EMPTY_FILTERS, similarListings } from '@/lib/data/listings';
+import { EMPTY_FILTERS, replacementValueFor, similarListings } from '@/lib/data/listings';
 import { bookedDays, toDateString } from '@/lib/data/rentals';
 import { formatDay, formatPrice, formatPricePerDay } from '@/lib/format';
 
@@ -213,6 +213,11 @@ export default function ListingDetailScreen() {
               </ThemedText>
             </Pressable>
           </View>
+          {!listing.soldAt && listing.rentable !== false ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Missing-item fee: {formatPrice(replacementValueFor(listing))}
+            </ThemedText>
+          ) : null}
 
           <View style={styles.actions}>{renderActions()}</View>
           {/* One line instead of a second calendar: dates get picked on the Rent screen. */}

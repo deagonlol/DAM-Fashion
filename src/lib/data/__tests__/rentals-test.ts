@@ -1,5 +1,9 @@
 import {
   accept,
+  amountOwedIfLost,
+  canReportLost,
+  LENDER_LOST_REPORT_DAYS,
+  reportLost,
   bookedDays,
   isAvailableOn,
   openOfferCount,
@@ -679,5 +683,49 @@ describe('dragRange', () => {
 
   it('ignores a drag that starts on a taken day', () => {
     expect(dragRange('2026-10-22', '2026-10-25', (start) => start !== '2026-10-22')).toBeNull();
+  });
+});
+
+describe('lost items', () => {
+  // Due back the end of Oct 21.
+  const out = () => rental({ status: 'picked_up', pickedUpAt: '2026-10-20T12:00:00Z', ...CODES });
+
+  it('lets the borrower report it lost any time they have it', () => {
+    const lost = reportLost(out(), 'me', local('2026-10-20T15:00:00'));
+    expect(lost.status).toBe('lost');
+    expect(lost.lostReportedBy).toBe('me');
+    expect(lost.lostAt).toBeDefined();
+  });
+
+  it(`lets the lender mark it lost only ${LENDER_LOST_REPORT_DAYS} days past due`, () => {
+    expect(canReportLost(out(), 'lender', local('2026-10-27T12:00:00'))).toBe(false);
+    expect(() => reportLost(out(), 'lender', local('2026-10-27T12:00:00'))).toThrow(RentalError);
+    expect(canReportLost(out(), 'lender', local('2026-10-29T00:30:00'))).toBe(true);
+    expect(reportLost(out(), 'lender', local('2026-10-29T00:30:00')).lostReportedBy).toBe('lender');
+  });
+
+  it('only applies to items that are out, and only to people in the borrow', () => {
+    expect(canReportLost(rental({ status: 'accepted' }), 'me', local('2026-10-20T12:00:00'))).toBe(false);
+    expect(() => reportLost(out(), 'stranger', local('2026-11-20T12:00:00'))).toThrow(RentalError);
+  });
+
+  it('can still be returned if it turns up', () => {
+    const lost = reportLost(out(), 'me', local('2026-10-21T12:00:00'));
+    const returned = confirmReturn(lost, 'lender', '2222', local('2026-10-21T18:00:00'));
+    expect(returned.status).toBe('returned');
+    expect(returned.returnedLate).toBe(false);
+  });
+
+  it('owes the fee fixed at request time, or the listing fee for older borrows', () => {
+    const item = { ...listing('a'), salePrice: 60 };
+    expect(amountOwedIfLost(rental({ replacementValue: 45 }), item)).toBe(45);
+    expect(amountOwedIfLost(rental(), item)).toBe(60);
+    expect(amountOwedIfLost(rental(), undefined)).toBeUndefined();
+  });
+
+  it('shows as a past order', () => {
+    const lost = rental({ status: 'lost', lostAt: '2026-10-22T12:00:00Z' });
+    expect(ordersFor([lost], 'me', 'borrower').past).toEqual([lost]);
+    expect(orderStatus(lost, local('2026-10-25T12:00:00')).label).toBe('Reported lost');
   });
 });

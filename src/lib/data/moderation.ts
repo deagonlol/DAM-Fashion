@@ -3,7 +3,8 @@
  *
  * Strikes come only from things that are verified, so one angry report can't ban someone:
  *   - a no-show the other person reported on a borrow
- *   - returning an item more than LATE_STRIKE_DAYS late (or still being that late)
+ *   - returning an item more than LATE_STRIKE_DAYS late (or still being that late, or reporting
+ *     it lost after that point)
  *   - a report the team reviewed and upheld
  *
  * Penalties, counting strikes from the last STRIKE_WINDOW_DAYS:
@@ -80,7 +81,10 @@ export function strikesFor(
       const returnedVeryLate =
         rental.status === 'returned' && rental.returnedAt && new Date(rental.returnedAt).getTime() > lateCutoff;
       const stillOutVeryLate = rental.status === 'picked_up' && now.getTime() > lateCutoff;
-      if (returnedVeryLate || stillOutVeryLate) {
+      // Reporting it lost doesn't erase lateness that already happened. A lender can only mark
+      // it lost well past this cutoff, so a lender-reported loss always comes with this strike.
+      const lostVeryLate = rental.status === 'lost' && rental.lostAt && new Date(rental.lostAt).getTime() > lateCutoff;
+      if (returnedVeryLate || stillOutVeryLate || lostVeryLate) {
         strikes.push({
           userId,
           source: 'late_return',

@@ -1,4 +1,12 @@
-import { EMPTY_FILTERS, matchesFilters, similarListings, sortListings, trendingListings } from '../listings';
+import {
+  EMPTY_FILTERS,
+  matchesFilters,
+  replacementValueError,
+  replacementValueFor,
+  similarListings,
+  sortListings,
+  trendingListings,
+} from '../listings';
 import type { Listing, ListingFilters } from '../types';
 
 function listing(overrides: Partial<Listing> & Pick<Listing, 'id'>): Listing {
@@ -180,5 +188,27 @@ describe('rent / buy filter', () => {
 
   it('a daily price limit leaves out sell-only listings', () => {
     expect(ids(filters({ maxPrice: 100 }))).toEqual(['rent', 'both', 'sold']);
+  });
+});
+
+describe('missing-item fee', () => {
+  it('is the sale price when there is one', () => {
+    expect(replacementValueFor({ pricePerDay: 10, salePrice: 80, replacementValue: 150 })).toBe(80);
+  });
+
+  it("is the lender's value otherwise, with no cap", () => {
+    expect(replacementValueFor({ pricePerDay: 10, replacementValue: 80 })).toBe(80);
+    expect(replacementValueFor({ pricePerDay: 10, replacementValue: 500 })).toBe(500);
+  });
+
+  it('defaults to 10x the daily rate for listings made before the fee existed', () => {
+    expect(replacementValueFor({ pricePerDay: 10 })).toBe(100);
+  });
+
+  it('must be above the daily rate', () => {
+    expect(replacementValueError(80, 10)).toBeNull();
+    expect(replacementValueError(5000, 10)).toBeNull();
+    expect(replacementValueError(10, 10)).not.toBeNull();
+    expect(replacementValueError(Number.NaN, 10)).not.toBeNull();
   });
 });

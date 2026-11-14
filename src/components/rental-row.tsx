@@ -19,6 +19,7 @@ export const STATUS_LABELS: Record<RentalStatus, string> = {
   picked_up: 'Out on borrow',
   returned: 'Returned',
   no_show: 'Missed pickup',
+  lost: 'Reported lost',
 };
 
 /** One in-progress borrow in the activity list. Opens the borrow's detail screen. */

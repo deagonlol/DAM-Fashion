@@ -53,6 +53,8 @@ export type ListingRow = {
   measurements?: string | null;
   fit_note?: string | null;
   sold_at?: string | null;
+  /** Missing until the missing-item fee migration has run. */
+  replacement_value?: number | string | null;
   image_uris: string[];
   paused: boolean;
   blocked_dates: string[];
@@ -105,6 +107,10 @@ export type RentalRow = {
   /** "HH:MM:SS" from Postgres. */
   pickup_time?: string | null;
   return_time?: string | null;
+  /** Missing until the missing-item fee migration has run. */
+  replacement_value?: number | string | null;
+  lost_at?: string | null;
+  lost_reported_by?: string | null;
 };
 
 export type RentalPhotoRow = {
@@ -243,6 +249,7 @@ export function toListing(row: ListingRow): Listing {
     salePrice: row.sale_price == null ? undefined : Number(row.sale_price),
     rentable: row.rentable !== false,
     soldAt: optional(row.sold_at ?? null),
+    replacementValue: row.replacement_value == null ? undefined : Number(row.replacement_value),
     imageUris: row.image_uris,
     createdAt: row.created_at,
     paused: row.paused,
@@ -327,6 +334,7 @@ export function toRental(row: RentalRow, codes: RentalCodeRow[] = []): Rental {
     returnTime: row.return_time ? row.return_time.slice(0, 5) : undefined,
     offeredPricePerDay:
       row.offered_price_per_day == null ? undefined : Number(row.offered_price_per_day),
+    replacementValue: row.replacement_value == null ? undefined : Number(row.replacement_value),
     status: row.status as RentalStatus,
     createdAt: row.created_at,
     pickupCode: code('pickup'),
@@ -336,6 +344,8 @@ export function toRental(row: RentalRow, codes: RentalCodeRow[] = []): Rental {
     returnedLate: optional(row.returned_late),
     conditionIssue: optional(row.condition_issue),
     noShowReportedBy: optional(row.no_show_reported_by),
+    lostAt: optional(row.lost_at ?? null),
+    lostReportedBy: optional(row.lost_reported_by ?? null),
   };
 }
 

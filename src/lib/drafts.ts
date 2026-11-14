@@ -22,6 +22,8 @@ export type ListingDraft = {
   price: string;
   salePrice: string;
   offer: string;
+  /** Missing-item fee. Missing from drafts saved before the fee existed. */
+  replacement?: string;
 };
 
 export type SavedDraft = ListingDraft & { id: string; updatedAt: string };
@@ -52,7 +54,8 @@ export function isDraftEmpty(draft: ListingDraft) {
     !draft.fitNote.trim() &&
     draft.pickupSpots.length === 0 &&
     !draft.price.trim() &&
-    !draft.salePrice.trim()
+    !draft.salePrice.trim() &&
+    !draft.replacement?.trim()
   );
 }
 

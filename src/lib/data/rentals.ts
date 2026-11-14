@@ -6,7 +6,7 @@
 import { formatTime } from '../format';
 import { supabase } from '../supabase';
 import { getCurrentUserId } from './session';
-import { getListingSnapshot } from './listings';
+import { getListingSnapshot, reloadListing, replacementValueFor } from './listings';
 import { getOrCreateConversation, sendMessage } from './messages';
 import { assertCanTransact, assertNotBlocked } from './moderation';
 import { rentalsStore } from './rentals-store';
@@ -21,6 +21,11 @@ export const MAX_RENTAL_DAYS = 14;
 export const LATE_GRACE_HOURS = 2;
 /** Hours after a return during which the lender can report a problem with the item. */
 export const ISSUE_REPORT_WINDOW_HOURS = 24;
+/**
+ * Days past the due date before the lender can mark an item lost. Longer than the late-return
+ * strike (LATE_STRIKE_DAYS in moderation.ts), so lenders can't use it to rush anyone.
+ */
+export const LENDER_LOST_REPORT_DAYS = 7;
 
 /** Borrows that hold the item: they block overlapping dates for other borrowers. */
 const BOOKED: RentalStatus[] = ['accepted', 'picked_up'];
@@ -132,6 +137,23 @@ export function canReportIssue(rental: Rental, now: Date) {
   if (rental.status !== 'returned' || !rental.returnedAt || rental.conditionIssue) return false;
   const windowEnd = new Date(rental.returnedAt).getTime() + ISSUE_REPORT_WINDOW_HOURS * 60 * 60 * 1000;
   return now.getTime() <= windowEnd;
+}
+
+/**
+ * Whether this person can report the item lost now. The borrower can any time they have it;
+ * the lender only once it's LENDER_LOST_REPORT_DAYS past due.
+ */
+export function canReportLost(rental: Rental, actorId: string, now: Date) {
+  if (rental.status !== 'picked_up') return false;
+  if (actorId === rental.borrowerId) return true;
+  if (actorId !== rental.lenderId) return false;
+  return now.getTime() > dueAt(rental).getTime() + LENDER_LOST_REPORT_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** What the borrower owes if the item is lost: fixed at request time, or from the listing for older borrows. */
+export function amountOwedIfLost(rental: Rental, listing: Listing | undefined) {
+  if (rental.replacementValue != null) return rental.replacementValue;
+  return listing ? replacementValueFor(listing) : undefined;
 }
 
 // ---- Rules ---------------------------------------------------------------------------------
@@ -267,10 +289,13 @@ export function confirmPickup(rental: Rental, actorId: string, code: string, now
   return { ...rental, status: 'picked_up', pickedUpAt: now.toISOString() };
 }
 
-/** Lender enters the code shown on the borrower's screen when the item comes back. */
+/**
+ * Lender enters the code shown on the borrower's screen when the item comes back. Also works
+ * for an item reported lost that turned up, which then no longer has a fee.
+ */
 export function confirmReturn(rental: Rental, actorId: string, code: string, now: Date): Rental {
   requireActor(actorId, rental.lenderId, 'The lender enters the return code.');
-  requireStatus(rental, ['picked_up'], "This item isn't out on a borrow.");
+  requireStatus(rental, ['picked_up', 'lost'], "This item isn't out on a borrow.");
   if (code.trim() !== rental.returnCode) {
     throw new RentalError("That code doesn't match. Check the code on the borrower's screen.");
   }
@@ -285,6 +310,17 @@ export function reportIssue(rental: Rental, actorId: string, description: string
     throw new RentalError(`Problems must be reported within ${ISSUE_REPORT_WINDOW_HOURS} hours of the return.`);
   }
   return { ...rental, conditionIssue: description.trim() };
+}
+
+export function reportLost(rental: Rental, actorId: string, now: Date): Rental {
+  if (actorId !== rental.lenderId && actorId !== rental.borrowerId) {
+    throw new RentalError('Only people in this borrow can report it lost.');
+  }
+  requireStatus(rental, ['picked_up'], "This item isn't out on a borrow.");
+  if (!canReportLost(rental, actorId, now)) {
+    throw new RentalError(`You can mark it lost once it's ${LENDER_LOST_REPORT_DAYS} days past the return date.`);
+  }
+  return { ...rental, status: 'lost', lostAt: now.toISOString(), lostReportedBy: actorId };
 }
 
 export function reportNoShow(rental: Rental, actorId: string, now: Date): Rental {
@@ -333,11 +369,11 @@ export function lendCount(rentals: Rental[], lenderId: string) {
 }
 
 const ACTIVE_ORDER: RentalStatus[] = ['requested', 'accepted', 'picked_up'];
-const PAST_ORDER: RentalStatus[] = ['returned', 'no_show'];
+const PAST_ORDER: RentalStatus[] = ['returned', 'no_show', 'lost'];
 
 /**
  * The user's borrows on one side, for the Orders tab. Active ones (waiting, scheduled, or out)
- * come soonest first; past ones (returned or missed) newest first. Declined and cancelled
+ * come soonest first; past ones (returned, missed, or lost) newest first. Declined and cancelled
  * requests never happened, so they're left out. Lenders get requests waiting on their answer
  * in their own list; borrowers see their own requests as active, since they're just waiting.
  */
@@ -419,6 +455,8 @@ export function orderStage(rental: Rental, now: Date, role: 'borrower' | 'lender
       };
     case 'no_show':
       return { status: 'Missed pickup', tone: 'muted', next: null, step: null };
+    case 'lost':
+      return { status: 'Reported lost', tone: 'danger', next: null, step: null };
     default:
       return { status: rental.status === 'declined' ? 'Declined' : 'Cancelled', tone: 'muted', next: null, step: null };
   }
@@ -430,7 +468,8 @@ export function orderStage(rental: Rental, now: Date, role: 'borrower' | 'lender
  */
 export function codeToShow(rental: Rental, role: 'borrower' | 'lender'): string | undefined {
   if (rental.status === 'accepted' && role === 'lender') return rental.pickupCode;
-  if (rental.status === 'picked_up' && role === 'borrower') return rental.returnCode;
+  // A lost item can still be returned if it turns up.
+  if ((rental.status === 'picked_up' || rental.status === 'lost') && role === 'borrower') return rental.returnCode;
   return undefined;
 }
 
@@ -480,6 +519,12 @@ export function orderStatus(rental: Rental, now: Date, role: 'borrower' | 'lende
       };
     case 'no_show':
       return { label: 'Missed pickup', text: dayLabel(rental.startDate, now), tone: 'muted' };
+    case 'lost':
+      return {
+        label: 'Reported lost',
+        text: dayLabel(toDateString(new Date(rental.lostAt ?? `${rental.endDate}T12:00:00`)), now),
+        tone: 'danger',
+      };
     default:
       return { label: rental.status === 'declined' ? 'Declined' : 'Cancelled', text: '', tone: 'muted' };
   }
@@ -508,7 +553,8 @@ export function setRentals(rentals: Rental[]) {
  */
 export async function putRentalRow(row: RentalRow): Promise<Rental> {
   const codes: RentalCodeRow[] =
-    row.status === 'accepted' || row.status === 'picked_up'
+    // A lost item can still be returned, so the borrower keeps their return code.
+    row.status === 'accepted' || row.status === 'picked_up' || row.status === 'lost'
       ? unwrap(await supabase.from('rental_codes').select('rental_id, kind, code').eq('rental_id', row.id))
       : [];
   const rental = toRental(row, codes);
@@ -557,13 +603,15 @@ export async function requestBorrow(request: BorrowRequest & { message?: string 
 
   const conversation = await getOrCreateConversation(listing.id);
   const note = request.message?.trim();
-  const offerLabel = `$${offeredPricePerDay % 1 === 0 ? offeredPricePerDay : offeredPricePerDay.toFixed(2)}/day`;
+  const money = (amount: number) => `$${amount % 1 === 0 ? amount : amount.toFixed(2)}`;
+  const owedIfLost = amountOwedIfLost(rental, listing);
   await sendMessage(
     conversation.id,
     `Requested to borrow ${formatRange(rental.startDate, rental.endDate)}, pickup at ${rental.pickupSpot}` +
       (rental.pickupTime ? ` at ${formatTime(rental.pickupTime)}` : '') +
       (rental.returnTime ? `, return at ${formatTime(rental.returnTime)}` : '') +
-      `, offering ${offerLabel}.` +
+      `, offering ${money(offeredPricePerDay)}/day.` +
+      (owedIfLost != null ? ` Agreed to pay ${money(owedIfLost)} if it's lost.` : '') +
       (note ? `\n\n${note}` : '')
   );
   return rental;
@@ -601,6 +649,17 @@ export async function submitReturnCode(id: string, code: string) {
 export async function reportConditionIssue(id: string, description: string) {
   reportIssue(findOrThrow(id), getCurrentUserId(), description, new Date());
   return callRentalFunction('report_condition_issue', { target_id: id, description });
+}
+
+/** Reports the item lost. The server also pauses the listing so nobody else requests it. */
+export async function reportItemLost(id: string) {
+  const rental = findOrThrow(id);
+  const actorId = getCurrentUserId();
+  reportLost(rental, actorId, new Date());
+  const updated = await callRentalFunction('report_lost', { target_id: id });
+  // Only the owner can still read a paused listing.
+  if (actorId === rental.lenderId) await reloadListing(rental.listingId);
+  return updated;
 }
 
 export async function reportMissedPickup(id: string) {

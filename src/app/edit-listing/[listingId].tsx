@@ -77,6 +77,7 @@ export default function EditListingScreen() {
     pricePerDay,
     salePrice,
     rentable,
+    replacementValue,
   } = listing;
 
   return (
@@ -95,6 +96,7 @@ export default function EditListingScreen() {
         pricePerDay,
         salePrice,
         rentable,
+        replacementValue,
       }}
       excludeId={listing.id}
       submitLabel="Save changes"

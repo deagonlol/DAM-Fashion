@@ -160,6 +160,30 @@ export async function getListingsByOwner(ownerId: string): Promise<Listing[]> {
   return listingsStore.get().filter((listing) => listing.ownerId === ownerId);
 }
 
+// ---- Missing-item fee ----------------------------------------------------------------------
+
+/**
+ * Listings made before the missing-item fee existed have no value set. Until the lender edits
+ * one, its fee is this many times the daily rate (rentals usually run 5–10% of an item's value
+ * per day). Lenders setting a fee themselves have no cap.
+ */
+export const DEFAULT_REPLACEMENT_MULTIPLIER = 10;
+
+/**
+ * What a borrower owes if they lose this item: the sale price when there is one (the lender
+ * already said that's what it's worth), otherwise the lender's missing-item fee.
+ */
+export function replacementValueFor(listing: Pick<Listing, 'pricePerDay' | 'salePrice' | 'replacementValue'>) {
+  if (listing.salePrice != null) return listing.salePrice;
+  return listing.replacementValue ?? listing.pricePerDay * DEFAULT_REPLACEMENT_MULTIPLIER;
+}
+
+/** Why a missing-item fee isn't allowed for this daily rate, or null if it's fine. */
+export function replacementValueError(value: number, pricePerDay: number) {
+  if (!Number.isFinite(value) || value <= pricePerDay) return 'It has to be more than the daily rate.';
+  return null;
+}
+
 /** NewListing as database columns, with local photos uploaded first. */
 async function listingColumns(ownerId: string, input: NewListing) {
   return {
@@ -175,13 +199,22 @@ async function listingColumns(ownerId: string, input: NewListing) {
     price_per_day: input.pricePerDay,
     sale_price: input.salePrice ?? null,
     rentable: input.rentable !== false,
+    // With a sale price, that's the fee, so a separate value isn't kept.
+    replacement_value: input.salePrice != null ? null : (input.replacementValue ?? null),
     image_uris: await uploadPhotos('listing-photos', ownerId, input.imageUris),
   };
+}
+
+function assertValidReplacementValue(input: NewListing) {
+  if (input.salePrice != null || input.replacementValue == null) return;
+  const message = replacementValueError(input.replacementValue, input.pricePerDay);
+  if (message) throw new ListingError(`Missing-item fee: ${message}`);
 }
 
 export async function createListing(input: NewListing): Promise<Listing> {
   const ownerId = getCurrentUserId();
   assertCanTransact(ownerId, new Date());
+  assertValidReplacementValue(input);
   const row = unwrap(
     await supabase
       .from('listings')
@@ -235,6 +268,7 @@ async function saveListing(id: string, changes: Record<string, unknown>) {
 
 export async function updateListing(id: string, changes: NewListing) {
   const listing = ownListingOrThrow(id);
+  assertValidReplacementValue(changes);
   return saveListing(id, await listingColumns(listing.ownerId, changes));
 }
 

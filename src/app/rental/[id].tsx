@@ -27,16 +27,20 @@ import { getOrCreateConversation } from '@/lib/data/messages';
 import { termsOf } from '@/lib/data/proposals';
 import {
   acceptRequest,
+  amountOwedIfLost,
   cancelBorrow,
   canReportIssue,
+  canReportLost,
   canReportNoShow,
   daysOverdue,
   declineRequest,
   formatRemainingTime,
   isExpiredRequest,
   ISSUE_REPORT_WINDOW_HOURS,
+  LENDER_LOST_REPORT_DAYS,
   rentalDays,
   reportConditionIssue,
+  reportItemLost,
   reportMissedPickup,
   submitPickupCode,
   submitReturnCode,
@@ -70,6 +74,7 @@ export default function RentalScreen() {
   const [code, setCode] = useState('');
   const [issue, setIssue] = useState('');
   const [showIssueForm, setShowIssueForm] = useState(false);
+  const [confirmingLost, setConfirmingLost] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!rental || !role) {
@@ -85,8 +90,12 @@ export default function RentalScreen() {
   const dailyPrice = rental.offeredPricePerDay ?? listing?.pricePerDay;
   const days = rentalDays(rental.startDate, rental.endDate);
   const late = daysOverdue(rental, now);
-  const lateCharge = dailyPrice != null && late > 0 ? lateFee(dailyPrice, late, listing?.salePrice) : null;
+  const owedIfLost = amountOwedIfLost(rental, listing);
+  // Late charges stop at the item's value: what losing it would cost.
+  const lateCharge = dailyPrice != null && late > 0 ? lateFee(dailyPrice, late, owedIfLost) : null;
   const expired = isExpiredRequest(rental, toDateString(now));
+  const owedLabel = owedIfLost != null ? formatPrice(owedIfLost) : 'the missing-item fee';
+  const showFee = ['requested', 'accepted', 'picked_up', 'lost'].includes(rental.status) && owedIfLost != null;
   const myReview = rentalReviews.find((review) => review.reviewerId === user.id);
   const visibleReviews = rentalReviews.filter((review) => isReviewVisible(review, allReviews, [rental], now));
 
@@ -167,6 +176,7 @@ export default function RentalScreen() {
                 price={rentalPrice(dailyPrice, days)}
               />
             ) : null}
+            {showFee ? <Detail label="If lost" value={formatPrice(owedIfLost!)} /> : null}
             <Pressable
               onPress={() => router.push(`/user/${other?.id ?? ''}`)}
               accessibilityRole="link"
@@ -308,6 +318,55 @@ export default function RentalScreen() {
                   />
                 </>
               )}
+              {canReportLost(rental, user.id, now) ? (
+                confirmingLost ? (
+                  <>
+                    <ThemedText type="smallBold" themeColor="danger">
+                      {role === 'borrower'
+                        ? `You’ll owe ${firstName} ${owedLabel}. If you find it, you can still return it and the fee goes away.`
+                        : `${firstName} will owe you ${owedLabel}, and this listing will be paused. If it turns up, you can still enter the return code.`}
+                    </ThemedText>
+                    <View style={styles.row}>
+                      <Button
+                        title="Never mind"
+                        variant="secondary"
+                        style={styles.flex}
+                        onPress={() => setConfirmingLost(false)}
+                      />
+                      <Button title="Report lost" style={styles.flex} onPress={() => run(() => reportItemLost(rental.id))} />
+                    </View>
+                  </>
+                ) : (
+                  <Pressable onPress={() => setConfirmingLost(true)} accessibilityRole="button" hitSlop={8}>
+                    <ThemedText type="small" themeColor="danger">
+                      {role === 'borrower' ? 'I lost this item' : `Mark as lost (${firstName} hasn’t returned it)`}
+                    </ThemedText>
+                  </Pressable>
+                )
+              ) : role === 'lender' && late > 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  If it’s still not back {LENDER_LOST_REPORT_DAYS} days after the return date, you can mark it lost.
+                </ThemedText>
+              ) : null}
+            </Card>
+          ) : null}
+
+          {rental.status === 'lost' ? (
+            <Card>
+              <ThemedText>
+                {lostMessage(rental, role, user.id, firstName, owedLabel)}
+              </ThemedText>
+              {role === 'borrower' ? (
+                <>
+                  <ThemedText>Found it? Return it to {firstName} and show them this code. The fee goes away.</ThemedText>
+                  <Code value={rental.returnCode} />
+                </>
+              ) : (
+                <>
+                  <ThemedText>If it turns up, enter the code on {firstName}’s screen to mark it returned.</ThemedText>
+                  <CodeEntry value={code} onChange={setCode} onSubmit={() => run(() => submitReturnCode(rental.id, code))} label="Confirm return" />
+                </>
+              )}
             </Card>
           ) : null}
 
@@ -423,10 +482,28 @@ function endedMessage(rental: Rental, role: 'borrower' | 'lender', userId: strin
   }
 }
 
+function lostMessage(
+  rental: Rental,
+  role: 'borrower' | 'lender',
+  userId: string,
+  firstName: string,
+  owedLabel: string
+) {
+  const reportedByMe = rental.lostReportedBy === userId;
+  if (role === 'borrower') {
+    return reportedByMe
+      ? `You reported this item lost. You owe ${firstName} ${owedLabel}.`
+      : `${firstName} marked this item lost because it wasn’t returned. You owe ${owedLabel}. If you did return it, report a problem below.`;
+  }
+  return reportedByMe
+    ? `You marked this item lost. ${firstName} owes you ${owedLabel}. The listing is paused; turn on “Open to borrow” in Edit listing if it comes back.`
+    : `${firstName} reported this item lost and owes you ${owedLabel}. The listing is paused; turn on “Open to borrow” in Edit listing if it comes back.`;
+}
+
 function Steps({ status }: { status: RentalStatus }) {
   const theme = useTheme();
   const reached = STEPS.findIndex((step) => step.status === status);
-  if (reached === -1) return null; // declined / cancelled / no-show: no progress bar
+  if (reached === -1) return null; // declined / cancelled / no-show / lost: no progress bar
   return (
     <View style={styles.steps} accessibilityLabel={`Step ${reached + 1} of ${STEPS.length}: ${STEPS[reached].label}`}>
       {STEPS.map((step, index) => (

@@ -52,7 +52,9 @@ export function badgesFor({ userId, isVerifiedStudent, rentals, reviews, strikes
   if (trustedLender) badges.push('trusted_lender');
 
   const myBorrows = rentals.filter((rental) => rental.borrowerId === userId);
-  const everLate = myBorrows.some((rental) => rental.returnedLate || isOverdue(rental, now));
+  const everLate = myBorrows.some(
+    (rental) => rental.returnedLate || isOverdue(rental, now) || rental.status === 'lost'
+  );
   if (clean && borrowCount(rentals, userId) >= ON_TIME_MIN_BORROWS && !everLate) badges.push('on_time');
 
   const rating = averageRating(reviews);

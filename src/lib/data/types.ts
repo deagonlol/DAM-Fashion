@@ -66,6 +66,11 @@ export type Listing = {
   rentable?: boolean;
   /** Set when a buy request is accepted. The item stays in the owner's closet, labeled sold. */
   soldAt?: string;
+  /**
+   * What the borrower owes if they lose it, when there's no sale price (a sale price is used
+   * instead when set). See replacementValueFor in listings.ts.
+   */
+  replacementValue?: number;
   /** Photos of the item from different angles. The first is the cover shown in lists. */
   imageUris: string[];
   createdAt: string;
@@ -136,6 +141,7 @@ export type PickupSpot = (typeof PICKUP_SPOTS)[number];
 /**
  * Where a borrow is in its lifecycle:
  * requested → accepted → picked_up → returned, with declined / cancelled / no_show as dead ends.
+ * picked_up → lost when the item is reported lost; it can still go lost → returned if it turns up.
  */
 export type RentalStatus =
   | 'requested'
@@ -144,7 +150,8 @@ export type RentalStatus =
   | 'cancelled'
   | 'picked_up'
   | 'returned'
-  | 'no_show';
+  | 'no_show'
+  | 'lost';
 
 /** One borrow of a listing, from request to return. */
 export type Rental = {
@@ -164,6 +171,11 @@ export type Rental = {
    * only for dates and status. The listing price is used when this borrow has none.
    */
   offeredPricePerDay?: number;
+  /**
+   * What the borrower owes if the item is lost, fixed when the request was sent so later
+   * listing edits don't change it. Only known to the two people in the borrow.
+   */
+  replacementValue?: number;
   status: RentalStatus;
   createdAt: string;
   /**
@@ -181,6 +193,9 @@ export type Rental = {
   conditionIssue?: string;
   /** Who reported the other person didn't show up for pickup. */
   noShowReportedBy?: string;
+  /** When the item was reported lost, and by whom (the borrower, or the lender once it's long overdue). */
+  lostAt?: string;
+  lostReportedBy?: string;
 };
 
 /** A photo of an item's condition, taken by either person at pickup or at return. */

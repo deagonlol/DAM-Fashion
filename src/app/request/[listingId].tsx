@@ -34,6 +34,7 @@ import {
   toDateString,
   type DateRange,
 } from '@/lib/data/rentals';
+import { replacementValueFor } from '@/lib/data/listings';
 import { PICKUP_SPOTS, type PickupSpot } from '@/lib/data/types';
 import { rentalPrice } from '@/lib/fees';
 import { formatDay, formatPrice, formatPricePerDay, formatTime } from '@/lib/format';
@@ -268,6 +269,18 @@ export default function RequestBorrowScreen() {
                 Pick dates to see the price per day × days renting, plus Lendr’s service fee.
               </ThemedText>
             )}
+            <View style={[styles.feeRow, { borderColor: theme.border }]}>
+              <View style={styles.flex}>
+                <ThemedText type="smallBold">If it’s lost</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {listing.salePrice != null ? 'The sale price' : 'Missing-item fee set by the lender'}
+                </ThemedText>
+              </View>
+              <ThemedText type="smallBold">{formatPrice(replacementValueFor(listing))}</ThemedText>
+            </View>
+            <ThemedText type="small" themeColor="textSecondary">
+              By sending this request, you agree to pay this if you lose the item.
+            </ThemedText>
           </View>
 
           {error ? (
@@ -327,6 +340,13 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.heading,
     fontSize: 18,
     lineHeight: 24,
+  },
+  feeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingTop: Spacing.two,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   summary: {
     borderRadius: 12,

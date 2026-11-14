@@ -80,6 +80,14 @@ describe('strikesFor', () => {
     expect(strikesFor('borrower', [justDue], [], now)).toHaveLength(0);
   });
 
+  it('keeps the late strike when an item is reported lost after the cutoff, but not before', () => {
+    const due = dateDaysAgo(9);
+    const lostEarly = rental({ status: 'lost', endDate: due, returnedAt: undefined, lostAt: daysAgo(9).toISOString() });
+    const lostLate = rental({ status: 'lost', endDate: due, returnedAt: undefined, lostAt: daysAgo(1).toISOString() });
+    expect(strikesFor('borrower', [lostEarly], [], now)).toHaveLength(0);
+    expect(strikesFor('borrower', [lostLate], [], now).map((s) => s.source)).toEqual(['late_return']);
+  });
+
   it('only counts reports the team upheld', () => {
     const reports = [
       report({ status: 'open' }),

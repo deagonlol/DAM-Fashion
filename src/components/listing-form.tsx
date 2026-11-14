@@ -15,6 +15,7 @@ import { useListings } from '@/hooks/use-listings';
 import { useCurrentUser } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
 import { findSimilarListings, preparePhoto, rankByMatches, warmUpImageSearch } from '@/lib/data/image-search';
+import { replacementValueError } from '@/lib/data/listings';
 import { suggestedDailyPrice, suggestedSalePrice, suggestFromLookalikes } from '@/lib/data/search';
 import { deleteListingDraft, loadListingDraft, newDraftId, saveListingDraft } from '@/lib/drafts';
 import { formatPrice } from '@/lib/format';
@@ -89,6 +90,9 @@ export function ListingForm({
   const [offer, setOffer] = useState<Offer>(
     initial?.rentable === false ? 'Buy only' : initial?.salePrice != null ? 'Rent or buy' : 'Rent'
   );
+  const [replacement, setReplacement] = useState(
+    initial?.replacementValue != null ? String(initial.replacementValue) : ''
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,6 +123,7 @@ export function ListingForm({
         setPrice(draft.price);
         setSalePrice(draft.salePrice);
         setOffer(OFFERS.find((option) => option === draft.offer) ?? 'Rent');
+        setReplacement(draft.replacement ?? '');
         setRestoredDraft(true);
       }
       setDraftReady(true);
@@ -145,6 +150,7 @@ export function ListingForm({
         price,
         salePrice,
         offer,
+        replacement,
       });
     }, 400);
     return () => clearTimeout(timer);
@@ -166,6 +172,7 @@ export function ListingForm({
     price,
     salePrice,
     offer,
+    replacement,
   ]);
 
   const suggestion =
@@ -229,8 +236,25 @@ export function ListingForm({
   const saleAmount = saleText === '' ? null : Number(saleText);
   const priceOk = !rents || (Number.isFinite(pricePerDay) && pricePerDay > 0);
   const saleOk = !sells || (saleAmount !== null && Number.isFinite(saleAmount) && saleAmount > pricePerDay);
+  // Rent-only listings need a missing-item fee from the lender. When it can be
+  // bought too, the sale price is the fee.
+  const needsReplacement = rents && !sells;
+  const replacementText = replacement.trim();
+  const replacementAmount = Number(replacementText);
+  const replacementProblem =
+    !needsReplacement || !priceOk
+      ? null
+      : replacementText === ''
+        ? 'Required when it can’t be bought.'
+        : replacementValueError(replacementAmount, pricePerDay);
   const isValid =
-    imageUris.length > 0 && title.trim().length > 0 && category !== null && size !== null && priceOk && saleOk;
+    imageUris.length > 0 &&
+    title.trim().length > 0 &&
+    category !== null &&
+    size !== null &&
+    priceOk &&
+    saleOk &&
+    replacementProblem === null;
 
   const photosLeft = MAX_LISTING_PHOTOS - imageUris.length;
 
@@ -285,6 +309,7 @@ export function ListingForm({
     setPrice('');
     setSalePrice('');
     setOffer('Rent');
+    setReplacement('');
   }
 
   async function handleSubmit() {
@@ -306,6 +331,7 @@ export function ListingForm({
         pricePerDay,
         salePrice: sells ? (saleAmount ?? undefined) : undefined,
         rentable: rents,
+        replacementValue: needsReplacement ? replacementAmount : undefined,
       });
       if (draftsOn) {
         void deleteListingDraft(user.id, draftId);
@@ -555,6 +581,28 @@ export function ListingForm({
                   </Pressable>
                 ) : null}
               </>
+            ) : null}
+
+            {needsReplacement ? (
+              <>
+                <TextField
+                  label="Missing-item fee ($)"
+                  value={replacement}
+                  onChangeText={setReplacement}
+                  keyboardType="decimal-pad"
+                />
+                <ThemedText
+                  type="small"
+                  themeColor={replacementText !== '' && replacementProblem ? 'danger' : 'textSecondary'}>
+                  {replacementText !== '' && replacementProblem
+                    ? replacementProblem
+                    : 'What the borrower pays if they lose it, like what it would cost to replace. Borrowers see this before they ask to borrow.'}
+                </ThemedText>
+              </>
+            ) : rents ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                If a borrower loses it, they pay the sale price.
+              </ThemedText>
             ) : null}
 
             {error ? (
