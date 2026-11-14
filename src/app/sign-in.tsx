@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { AuthForm } from '@/components/auth-form';
 import { TextField } from '@/components/text-field';
 import { ThemedText } from '@/components/themed-text';
+import { Wordmark } from '@/components/wordmark';
 import { Fonts, Spacing } from '@/constants/theme';
 import { AuthError, ConfirmEmailError, signIn } from '@/lib/data/auth';
 
@@ -41,9 +42,7 @@ export default function SignInScreen() {
       onSubmit={() => enter(email, password)}
       hero={
         <SafeAreaView edges={['top']} style={styles.hero}>
-          <ThemedText themeColor="accent" style={styles.name}>
-            Lendr
-          </ThemedText>
+          <Wordmark height={64} />
           <ThemedText style={styles.headline}>
             Your campus{' '}
             <ThemedText style={styles.headline} themeColor="accent">
@@ -110,11 +109,6 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingTop: Spacing.five,
     paddingBottom: Spacing.two,
-  },
-  name: {
-    fontFamily: Fonts.heading,
-    fontSize: 48,
-    lineHeight: 56,
   },
   headline: {
     fontFamily: Fonts.heading,

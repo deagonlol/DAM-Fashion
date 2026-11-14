@@ -201,7 +201,7 @@ export default function RentalScreen() {
               <View style={styles.row}>
                 <Button
                   title="Decline"
-                  variant="secondary"
+                  variant="danger"
                   style={styles.flex}
                   onPress={() => run(() => declineRequest(rental.id))}
                 />

@@ -1,6 +1,8 @@
+import { SymbolView } from 'expo-symbols';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { BADGE_ICONS } from '@/constants/badge-icons';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useBadges } from '@/hooks/use-users';
@@ -34,8 +36,9 @@ export function Badge({ id, compact = false }: { id: BadgeId; compact?: boolean 
       style={[styles.badge, { backgroundColor: theme.backgroundSelected }, compact && styles.compact]}
       accessible
       accessibilityLabel={`${badge.label}: ${badge.description}`}>
+      <SymbolView name={BADGE_ICONS[id]} tintColor={theme.accent} size={13} />
       <ThemedText type="small" style={[styles.text, { color: theme.text }]}>
-        {badge.icon} {badge.label}
+        {badge.label}
       </ThemedText>
     </View>
   );
@@ -48,6 +51,9 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
     borderRadius: 999,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,

@@ -8,8 +8,9 @@ import { DarkTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useSyncExternalStore } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
+import { Wordmark } from '@/components/wordmark';
 import { Colors, Fonts } from '@/constants/theme';
 import { useScheduleReminders } from '@/hooks/use-notices';
 import { useSession } from '@/hooks/use-session';
@@ -56,7 +57,7 @@ export default function RootLayout() {
   if (!fontsReady || !authReady) {
     return Platform.OS === 'web' ? (
       <View style={styles.loading}>
-        <Text style={styles.loadingName}>Lendr</Text>
+        <Wordmark height={64} color="dark" />
         <ActivityIndicator color={Colors.background} />
       </View>
     ) : null;
@@ -152,10 +153,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
     backgroundColor: Colors.accent,
-  },
-  loadingName: {
-    fontSize: 40,
-    fontWeight: '700',
-    color: Colors.background,
   },
 });

@@ -98,7 +98,7 @@ export function ProposalCard({ rental, proposal, current, userId, otherName }: P
         <View style={styles.actions}>
           <Button
             title="Decline"
-            variant="secondary"
+            variant="danger"
             style={styles.flex}
             disabled={busy}
             onPress={() => run(() => respondToProposal(rental, proposal, false))}

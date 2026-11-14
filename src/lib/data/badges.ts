@@ -9,18 +9,17 @@ import type { Rental, Review } from './types';
 
 export type BadgeId = 'verified_student' | 'trusted_lender' | 'on_time' | 'top_rated' | 'first_lend';
 
-export const BADGES: Record<BadgeId, { label: string; description: string; icon: string }> = {
+export const BADGES: Record<BadgeId, { label: string; description: string }> = {
   // Sign-up doesn't confirm the email (UT's filter blocks our emails), so this says what we
   // actually know: they signed up with a UT address. Call it verified once sign-up confirms it.
-  verified_student: { label: 'UT email', description: 'Signed up with a UT Austin email address.', icon: '✓' },
+  verified_student: { label: 'UT email', description: 'Signed up with a UT Austin email address.' },
   trusted_lender: {
     label: 'Trusted lender',
     description: '5+ completed lends, rated 4.5★ or higher, no strikes.',
-    icon: '★',
   },
-  on_time: { label: 'On-time returner', description: '3+ borrows, every one returned on time.', icon: '⏱' },
-  top_rated: { label: 'Top rated', description: '3+ reviews averaging 4.8★ or higher.', icon: '♛' },
-  first_lend: { label: 'First lend', description: 'Lent their first item.', icon: '✿' },
+  on_time: { label: 'On-time returner', description: '3+ borrows, every one returned on time.' },
+  top_rated: { label: 'Top rated', description: '3+ reviews averaging 4.8★ or higher.' },
+  first_lend: { label: 'First lend', description: 'Lent their first item.' },
 };
 
 export const TRUSTED_LENDER_MIN_LENDS = 5;
@@ -49,9 +48,7 @@ export function badgesFor({ userId, isVerifiedStudent, rentals, reviews, strikes
   const lends = lendCount(rentals, userId);
   const lenderRating = averageRating(reviews.filter((review) => review.revieweeRole === 'lender'));
   const trustedLender =
-    clean &&
-    lends >= TRUSTED_LENDER_MIN_LENDS &&
-    (lenderRating === null || lenderRating >= TRUSTED_LENDER_MIN_RATING);
+    clean && lends >= TRUSTED_LENDER_MIN_LENDS && (lenderRating === null || lenderRating >= TRUSTED_LENDER_MIN_RATING);
   if (trustedLender) badges.push('trusted_lender');
 
   const myBorrows = rentals.filter((rental) => rental.borrowerId === userId);

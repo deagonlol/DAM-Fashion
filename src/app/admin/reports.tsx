@@ -146,7 +146,7 @@ function AppealCard({ appeal }: { appeal: Appeal }) {
         multiline
       />
       <View style={styles.actions}>
-        <Button title="Deny" variant="secondary" style={styles.flex} onPress={() => decide(false)} />
+        <Button title="Deny" variant="danger" style={styles.flex} onPress={() => decide(false)} />
         <Button title="Approve (remove strike)" style={styles.flex} onPress={() => decide(true)} />
       </View>
       {error ? (

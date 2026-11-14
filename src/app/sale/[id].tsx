@@ -119,7 +119,7 @@ export default function SaleScreen() {
             <View style={styles.row}>
               <Button
                 title="Decline"
-                variant="secondary"
+                variant="danger"
                 style={styles.flex}
                 onPress={() => run(() => declineSale(sale.id))}
               />

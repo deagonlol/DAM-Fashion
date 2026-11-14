@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { NotificationsButton } from '@/components/notifications-button';
 import { ProfileButton } from '@/components/profile-button';
 import { ThemedText } from '@/components/themed-text';
+import { Wordmark } from '@/components/wordmark';
 import { Spacing } from '@/constants/theme';
 
 type TabHeaderProps = {
@@ -21,9 +22,16 @@ export function TabHeader({ title, children, style }: TabHeaderProps) {
   return (
     <View style={[styles.header, style]}>
       <View style={styles.titleRow}>
-        <ThemedText type="subtitle" themeColor="accent" numberOfLines={1} style={styles.title}>
-          {title}
-        </ThemedText>
+        {/* Home's title is the app name, so it shows the logo instead of text. */}
+        {title === 'Lendr' ? (
+          <View style={styles.title}>
+            <Wordmark height={30} />
+          </View>
+        ) : (
+          <ThemedText type="subtitle" themeColor="accent" numberOfLines={1} style={styles.title}>
+            {title}
+          </ThemedText>
+        )}
         <View style={styles.actions}>
           <NotificationsButton />
           <ProfileButton />
